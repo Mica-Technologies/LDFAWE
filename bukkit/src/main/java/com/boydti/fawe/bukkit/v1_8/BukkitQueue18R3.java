@@ -131,7 +131,8 @@ public class BukkitQueue18R3 extends BukkitQueue_0<net.minecraft.server.v1_8_R3.
 
     @Override
     public boolean setMCA(final int mcaX, final int mcaZ, final RegionWrapper allowed, final Runnable whileLocked, final boolean saveChunks, final boolean load) {
-        TaskManager.IMP.sync(new RunnableVal<Boolean>() {
+        throw new UnsupportedOperationException();
+        /*TaskManager.IMP.sync(new RunnableVal<Boolean>() {
             @Override
             public void run(Boolean value) {
                 long start = System.currentTimeMillis();
@@ -240,7 +241,7 @@ public class BukkitQueue18R3 extends BukkitQueue_0<net.minecraft.server.v1_8_R3.
                 }
             }
         });
-        return true;
+        return true;*/
     }
 
     @Override
@@ -535,7 +536,7 @@ public class BukkitQueue18R3 extends BukkitQueue_0<net.minecraft.server.v1_8_R3.
 
     public boolean hasEntities(net.minecraft.server.v1_8_R3.Chunk nmsChunk) {
         for (int i = 0; i < nmsChunk.entitySlices.length; i++) {
-            List<Entity> slice = nmsChunk.entitySlices[i];
+            EntitySlice<Entity> slice = nmsChunk.entitySlices[i];
             if (slice != null && !slice.isEmpty()) {
                 return true;
             }
