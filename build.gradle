@@ -94,7 +94,7 @@ subprojects {
     }
 
     repositories {
-        maven {url "https://mvnrepository.com/artifact/"}
+        // maven {url "https://mvnrepository.com/artifact/"}
         mavenCentral()
         maven {url "https://repo.dmulloy2.net/content/groups/public/"}
         maven {url "https://repo.destroystokyo.com/repository/maven-public//"}
