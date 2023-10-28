@@ -4,7 +4,7 @@ buildscript {
         maven { url = "https://oss.sonatype.org/content/repositories/snapshots/" }
         jcenter()
     }
-	dependencies {
+    dependencies {
         classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.3'
         classpath 'org.ajoberstar:grgit:1.7.0'
     }
@@ -74,7 +74,7 @@ ext {
 }
 
 version = date + revision + buildNumber + semver
-if ( project.hasProperty("lzNoVersion") ) { // gradle build -PlzNoVersion
+if (project.hasProperty("lzNoVersion")) { // gradle build -PlzNoVersion
     version = "unknown"
 }
 description = """LDFAWE"""
@@ -96,23 +96,24 @@ subprojects {
     repositories {
         // maven {url "https://mvnrepository.com/artifact/"}
         mavenCentral()
-        maven {url "https://repo.dmulloy2.net/content/groups/public/"}
-        maven {url "https://repo.destroystokyo.com/repository/maven-public//"}
+        maven { url "https://repo.dmulloy2.net/content/groups/public/" }
+        maven { url "https://repo.destroystokyo.com/repository/maven-public//" }
         //maven {url "https://ci.emc.gs/nexus/content/groups/aikar/" }
-        maven {url "https://ci.athion.net/plugin/repository/tools/"}
+        maven { url "https://ci.athion.net/plugin/repository/tools/" }
         mavenLocal()
-        maven {url "https://hub.spigotmc.org/nexus/content/groups/public/"}
-        maven {url "https://maven.enginehub.org/repo/"}
-        maven {url "https://repo.maven.apache.org/maven2"}
-        maven {url "https://ci.frostcast.net/plugin/repository/everything"}
-        maven {url "https://repo.spongepowered.org/maven"}
-        maven {url "https://dl.bintray.com/tastybento/maven-repo"}
-        maven {url "https://repo.inventivetalent.org/content/groups/public/"}
-        maven {url "https://store.ttyh.ru/libraries/"}
-        maven {url "https://repo.dmulloy2.net/nexus/repository/public/"}
-        maven {url "https://maven.elmakers.com/repository/"}
-        maven {url "https://ci.ender.zone/plugin/repository/everything/"}
-        maven {url "https://repo.minebench.de/"}
+        maven { url "https://hub.spigotmc.org/nexus/content/groups/public/" }
+        maven { url "https://maven.enginehub.org/repo/" }
+        maven { url "https://repo.maven.apache.org/maven2" }
+        maven { url "https://ci.frostcast.net/plugin/repository/everything" }
+        maven { url "https://repo.spongepowered.org/maven" }
+        maven { url "https://dl.bintray.com/tastybento/maven-repo" }
+        maven { url "https://repo.inventivetalent.org/content/groups/public/" }
+        maven { url "https://store.ttyh.ru/libraries/" }
+        maven { url "https://repo.dmulloy2.net/nexus/repository/public/" }
+        maven { url "https://maven.elmakers.com/repository/" }
+        maven { url "https://ci.ender.zone/plugin/repository/everything/" }
+        maven { url "https://repo.minebench.de/" }
+        maven { url 'https://jitpack.io' }
     }
 }
 task aggregatedJavadocs(type: Javadoc, description: 'Generate javadocs from all child projects as if it was a single project', group: 'Documentation') {
