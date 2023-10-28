@@ -39,7 +39,7 @@ public class TextureUtil implements TextureHolder {
         }
         HashSet<BaseBlock> blocks = new HashSet<>();
         for (int combined = 0; combined < ids.length; combined++) {
-            if (ids[combined]) blocks.add(FaweCache.CACHE_BLOCK[combined]);
+            if (ids[combined]) blocks.add(FaweCache.getBlock(combined));
         }
         return fromBlocks(blocks);
     }
@@ -55,7 +55,7 @@ public class TextureUtil implements TextureHolder {
         new MaskTraverser(mask).reset(extent);
         TextureUtil tu = Fawe.get().getTextureUtil();
         for (int combinedId : tu.getValidBlockIds()) {
-            BaseBlock block = FaweCache.CACHE_BLOCK[combinedId];
+            BaseBlock block = FaweCache.getBlock(combinedId);
             pattern.setBlock(block);
             if (mask.test(Vector.ZERO)) blocks.add(block);
         }
@@ -382,7 +382,7 @@ public class TextureUtil implements TextureHolder {
             }
         }
         if (min == Long.MAX_VALUE) return null;
-        return FaweCache.CACHE_BLOCK[closest];
+        return FaweCache.getBlock(closest);
     }
 
     public BaseBlock getNearestBlock(BaseBlock block) {
@@ -409,7 +409,7 @@ public class TextureUtil implements TextureHolder {
             }
         }
         if (min == Long.MAX_VALUE) return null;
-        return FaweCache.CACHE_BLOCK[closest];
+        return FaweCache.getBlock(closest);
     }
 
     /**
@@ -913,7 +913,7 @@ public class TextureUtil implements TextureHolder {
             }
         }
         if (min == Long.MAX_VALUE) return null;
-        return FaweCache.CACHE_BLOCK[closest];
+        return FaweCache.getBlock(closest);
     }
 
     private String getFileName(String path) {

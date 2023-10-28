@@ -3,6 +3,7 @@ package com.boydti.fawe.util;
 import com.boydti.fawe.FaweCache;
 import com.sk89q.worldedit.blocks.BaseBlock;
 import it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap;
+
 import java.io.FileNotFoundException;
 
 public class CachedTextureUtil extends DelegateTextureUtil {
@@ -49,7 +50,7 @@ public class CachedTextureUtil extends DelegateTextureUtil {
     public BaseBlock getNearestBlock(int color) {
         Integer value = colorBlockMap.get(color);
         if (value != null) {
-            return FaweCache.CACHE_BLOCK[value];
+            return FaweCache.getBlock(value);
         }
         BaseBlock result = parent.getNearestBlock(color);
         if (result != null) {

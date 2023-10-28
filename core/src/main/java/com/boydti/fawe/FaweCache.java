@@ -1,151 +1,57 @@
 package com.boydti.fawe;
 
 import com.boydti.fawe.object.PseudoRandom;
-import com.sk89q.jnbt.ByteArrayTag;
-import com.sk89q.jnbt.ByteTag;
-import com.sk89q.jnbt.CompoundTag;
-import com.sk89q.jnbt.DoubleTag;
-import com.sk89q.jnbt.EndTag;
-import com.sk89q.jnbt.FloatTag;
-import com.sk89q.jnbt.IntArrayTag;
-import com.sk89q.jnbt.IntTag;
-import com.sk89q.jnbt.ListTag;
-import com.sk89q.jnbt.LongTag;
-import com.sk89q.jnbt.ShortTag;
-import com.sk89q.jnbt.StringTag;
-import com.sk89q.jnbt.Tag;
+import com.sk89q.jnbt.*;
 import com.sk89q.worldedit.WorldEdit;
-import com.sk89q.worldedit.blocks.BaseBlock;
-import com.sk89q.worldedit.blocks.BaseItem;
-import com.sk89q.worldedit.blocks.BlockType;
-import com.sk89q.worldedit.blocks.ImmutableBlock;
-import com.sk89q.worldedit.blocks.ImmutableDatalessBlock;
-import com.sk89q.worldedit.blocks.ImmutableNBTBlock;
+import com.sk89q.worldedit.blocks.*;
 import com.sk89q.worldedit.extension.input.InputParseException;
 import com.sk89q.worldedit.extension.input.ParserContext;
 import com.sk89q.worldedit.world.biome.BaseBiome;
 import com.sk89q.worldedit.world.registry.BundledBlockData;
-import java.awt.Color;
+
+import java.awt.*;
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class FaweCache {
     /**
      * [ y | z | x ] => index
      */
-    public final static short[][][] CACHE_I = new short[256][16][16];
+    private final static short[][][] CACHE_I = new short[256][16][16];
     /**
      * [ y | z | x ] => index
      */
-    public final static short[][][] CACHE_J = new short[256][16][16];
-
+    private final static short[][][] CACHE_J = new short[256][16][16];
     /**
      * [ i | j ] => x
      */
-    public final static byte[][] CACHE_X = new byte[16][4096];
+    private final static byte[][] CACHE_X = new byte[16][4096];
     /**
      * [ i | j ] => y
      */
-    public final static short[][] CACHE_Y = new short[16][4096];
+    private final static short[][] CACHE_Y = new short[16][4096];
     /**
      * [ i | j ] => z
      */
-    public final static byte[][] CACHE_Z = new byte[16][4096];
-
-    public final static boolean[] CACHE_PASSTHROUGH = new boolean[65535];
-    public final static boolean[] CACHE_TRANSLUSCENT = new boolean[65535];
-
+    private final static byte[][] CACHE_Z = new byte[16][4096];
+    private final static boolean[] CACHE_PASSTHROUGH = new boolean[65535];
+    private final static boolean[] CACHE_TRANSLUSCENT = new boolean[65535];
     /**
      * Immutable biome cache
      */
-    public final static BaseBiome[] CACHE_BIOME = new BaseBiome[256];
-
+    private final static BaseBiome[] CACHE_BIOME = new BaseBiome[256];
     /**
      * Immutable BaseBlock cache
      * [ combined ] => block
      */
-    public final static BaseBlock[] CACHE_BLOCK = new BaseBlock[Character.MAX_VALUE + 1];
-
-    public final static BaseItem[] CACHE_ITEM = new BaseItem[Character.MAX_VALUE + 1];
-
+    private final static BaseBlock[] CACHE_BLOCK = new BaseBlock[Character.MAX_VALUE + 1];
+    private final static BaseItem[] CACHE_ITEM = new BaseItem[Character.MAX_VALUE + 1];
     /**
      * Faster than java random (since it just needs to look random)
      */
-    public final static PseudoRandom RANDOM = new PseudoRandom();
-
-    public final static Color[] CACHE_COLOR = new Color[Character.MAX_VALUE + 1];
-
-    /**
-     * Get the cached BaseBlock object for an id/data<br>
-     * - The block is immutable
-     *
-     * @param id
-     * @param data
-     * @return
-     */
-    public static final BaseBlock getBlock(int id, int data) {
-        return CACHE_BLOCK[(id << 4) + data];
-    }
-
-    public static final BaseItem getItem(int id, int data) {
-        return CACHE_ITEM[(id << 4) + data];
-    }
-
-    /**
-     * Get the combined data for a block
-     *
-     * @param id
-     * @param data
-     * @return
-     */
-    public static final int getCombined(int id, int data) {
-        return (id << 4) + data;
-    }
-
-    public static final int getId(int combined) {
-        return combined >> 4;
-    }
-
-    public static final int getData(int combined) {
-        return combined & 15;
-    }
-
-    /**
-     * Get the combined id for a block
-     *
-     * @param block
-     * @return
-     */
-    public static final int getCombined(BaseBlock block) {
-        return getCombined(block.getId(), block.getData());
-    }
-
-    public static final BaseBlock getBlock(String block, boolean allAllowed, boolean allowNoData) throws InputParseException {
-        ParserContext context = new ParserContext();
-        context.setRestricted(!allAllowed);
-        context.setPreferringWildcard(allowNoData);
-        return WorldEdit.getInstance().getBlockFactory().parseFromInput(block, context);
-    }
-
-    public static final Color getColor(int id, int data) {
-        Color exact = CACHE_COLOR[getCombined(id, data)];
-        if (exact != null) {
-            return exact;
-        }
-        Color base = CACHE_COLOR[getCombined(id, 0)];
-        if (base != null) {
-            return base;
-        }
-        return CACHE_COLOR[0];
-    }
-
-    public static final BaseBiome getBiome(int id) {
-        return CACHE_BIOME[id];
-    }
+    private final static PseudoRandom RANDOM = new PseudoRandom();
+    private final static Color[] CACHE_COLOR = new Color[Character.MAX_VALUE + 1];
 
     static {
         for (int i = 0; i < Character.MAX_VALUE; i++) {
@@ -291,6 +197,130 @@ public class FaweCache {
         }
     }
 
+    public final static short getI(int y, int z, int x) {
+        return CACHE_I[y][z][x];
+    }
+
+    public final static short[][] getJ(int y) {
+        return CACHE_J[y];
+    }
+
+    public final static short getJ(int y, int z, int x) {
+        return CACHE_J[y][z][x];
+    }
+
+    public final static byte[] getX(int i) {
+        return CACHE_X[i];
+    }
+
+    public final static byte getX(int i, int j) {
+        return CACHE_X[i][j];
+    }
+
+    public final static short[] getY(int i) {
+        return CACHE_Y[i];
+    }
+
+    public final static short getY(int i, int j) {
+        return CACHE_Y[i][j];
+    }
+
+    public final static byte[] getZ(int i) {
+        return CACHE_Z[i];
+    }
+
+    public final static byte getZ(int i, int j) {
+        return CACHE_Z[i][j];
+    }
+
+    public final static PseudoRandom getRandom() {
+        return RANDOM;
+    }
+
+    /**
+     * Get the cached BaseBlock object for an id/data<br>
+     * - The block is immutable
+     *
+     * @param id
+     * @param data
+     * @return
+     */
+    public static final BaseBlock getBlock(int id, int data) {
+        return getBlock((id << 4) + data);
+    }
+
+    public static final BaseBlock getBlock(int index) {
+        return CACHE_BLOCK[index];
+    }
+
+    public static final BaseBlock[] getBlocks() {
+        return CACHE_BLOCK;
+    }
+
+    public static final int getBlocksCount() {
+        return CACHE_BLOCK.length;
+    }
+
+    public static final BaseItem getItem(int id, int data) {
+        return getItem((id << 4) + data);
+    }
+
+    public static final BaseItem getItem(int index) {
+        return CACHE_ITEM[index];
+    }
+
+    /**
+     * Get the combined data for a block
+     *
+     * @param id
+     * @param data
+     * @return
+     */
+    public static final int getCombined(int id, int data) {
+        return (id << 4) + data;
+    }
+
+    public static final int getId(int combined) {
+        return combined >> 4;
+    }
+
+    public static final int getData(int combined) {
+        return combined & 15;
+    }
+
+    /**
+     * Get the combined id for a block
+     *
+     * @param block
+     * @return
+     */
+    public static final int getCombined(BaseBlock block) {
+        return getCombined(block.getId(), block.getData());
+    }
+
+    public static final BaseBlock getBlock(String block, boolean allAllowed, boolean allowNoData) throws InputParseException {
+        ParserContext context = new ParserContext();
+        context.setRestricted(!allAllowed);
+        context.setPreferringWildcard(allowNoData);
+        return WorldEdit.getInstance().getBlockFactory().parseFromInput(block, context);
+    }
+
+    public static final Color getColor(int id, int data) {
+        Color exact = CACHE_COLOR[getCombined(id, data)];
+        if (exact != null) {
+            return exact;
+        }
+        Color base = CACHE_COLOR[getCombined(id, 0)];
+        if (base != null) {
+            return base;
+        }
+        return CACHE_COLOR[0];
+    }
+
+    public static final BaseBiome getBiome(int id) {
+        return CACHE_BIOME[id];
+    }
+
     public static boolean canPassThrough(int id, int data) {
         return CACHE_PASSTHROUGH[FaweCache.getCombined(id, data)];
     }
@@ -417,10 +447,6 @@ public class FaweCache {
             default:
                 return false;
         }
-    }
-
-    public enum LightType {
-        TRANSPARENT, OCCLUDING, SOLID_EMIT, TRANSPARENT_EMIT
     }
 
     public static boolean isTransparent(int id) {
@@ -1056,5 +1082,9 @@ public class FaweCache {
         }
         if (clazz == null) clazz = EndTag.class;
         return new ListTag(clazz, list);
+    }
+
+    public enum LightType {
+        TRANSPARENT, OCCLUDING, SOLID_EMIT, TRANSPARENT_EMIT
     }
 }

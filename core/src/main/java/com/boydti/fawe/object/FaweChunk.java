@@ -116,18 +116,18 @@ public abstract class FaweChunk<T> implements Callable<FaweChunk> {
         int combined = getBlockCombinedId(x, y, z);
         int id = FaweCache.getId(combined);
         if (!FaweCache.hasNBT(id)) {
-            return FaweCache.CACHE_BLOCK[combined];
+            return FaweCache.getBlock(combined);
         }
         try {
             CompoundTag tile = getTile(x & 15, y, z & 15);
             if (tile != null) {
                 return new BaseBlock(id, FaweCache.getData(combined), tile);
             } else {
-                return FaweCache.CACHE_BLOCK[combined];
+                return FaweCache.getBlock(combined);
             }
         } catch (Throwable e) {
             MainUtil.handleError(e);
-            return FaweCache.CACHE_BLOCK[combined];
+            return FaweCache.getBlock(combined);
         }
     }
 
@@ -182,7 +182,7 @@ public abstract class FaweChunk<T> implements Callable<FaweChunk> {
         char[][] ids = new char[HEIGHT >> 4][];
         for (int y = 0; y < HEIGHT >> 4; y++) {
             int y4 = y >> 4;
-            short[][] i1 = FaweCache.CACHE_J[y];
+            short[][] i1 = FaweCache.getJ(y);
             for (int z = 0; z < 16; z++) {
                 short[] i2 = i1[z];
                 for (int x = 0; x < 16; x++) {

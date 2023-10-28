@@ -11,13 +11,13 @@ import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.blocks.BaseBlock;
 import com.sk89q.worldedit.command.tool.brush.Brush;
 import com.sk89q.worldedit.function.pattern.Pattern;
+
 import java.util.Arrays;
 
 public class ErodeBrush implements Brush {
 
-    private PseudoRandom rand = new PseudoRandom();
-
     private static final Vector[] FACES_TO_CHECK = {new Vector(0, 0, 1), new Vector(0, 0, -1), new Vector(0, 1, 0), new Vector(0, -1, 0), new Vector(1, 0, 0), new Vector(-1, 0, 0)};
+    private PseudoRandom rand = new PseudoRandom();
 
     @Override
     public void build(EditSession editSession, Vector position, Pattern pattern, double size) throws MaxChangedBlocksException {
@@ -149,7 +149,7 @@ public class ErodeBrush implements Brush {
                         }
                     }
                     if (total >= erodeFaces) {
-                        target.setBlock(x, y, z, FaweCache.CACHE_BLOCK[highestState << 4]);
+                        target.setBlock(x, y, z, FaweCache.getBlock(highestState << 4));
                     }
                 }
             }
