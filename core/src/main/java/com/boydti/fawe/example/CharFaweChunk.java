@@ -111,6 +111,11 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
         return bitMask;
     }
 
+    @Deprecated
+    public void setBitMask(int ignore) {
+        // Remove
+    }
+
     /**
      * Get the raw data for a section
      *
@@ -134,12 +139,12 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
 
     @Override
     public int getBlockCombinedId(int x, int y, int z) {
-        short i = FaweCache.CACHE_I[y][z][x];
+        short i = FaweCache.getI(y, z, x);
         char[] array = getIdArray(i);
         if (array == null) {
             return 0;
         }
-        return array[FaweCache.CACHE_J[y][z][x]];
+        return array[FaweCache.getJ(y, z, x)];
     }
 
     @Override
@@ -193,8 +198,8 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
 
     @Override
     public void setBlock(int x, int y, int z, int id) {
-        final int i = FaweCache.CACHE_I[y][z][x];
-        final int j = FaweCache.CACHE_J[y][z][x];
+        final int i = FaweCache.getI(y,z,x);
+        final int j = FaweCache.getJ(y,z,x);
         char[] vs = this.ids[i];
         if (vs == null) {
             vs = this.ids[i] = new char[4096];
@@ -239,8 +244,8 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
 
     @Override
     public void setBlock(final int x, final int y, final int z, final int id, int data) {
-        final int i = FaweCache.CACHE_I[y][z][x];
-        final int j = FaweCache.CACHE_J[y][z][x];
+        final int i = FaweCache.getI(y,z,x);
+        final int j = FaweCache.getJ(y,z,x);
         char[] vs = this.ids[i];
         if (vs == null) {
             vs = this.ids[i] = new char[4096];
@@ -339,11 +344,6 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
                 heightMap[z << 4 | x] = (byte) y;
                 return;
         }
-    }
-
-    @Deprecated
-    public void setBitMask(int ignore) {
-        // Remove
     }
 
     @Override

@@ -502,7 +502,7 @@ public class ClipboardRemapper {
         int combined = block.getCombined();
         if (remap[combined]) {
             char value = remapCombined[combined];
-            BaseBlock newBlock = FaweCache.CACHE_BLOCK[value];
+            BaseBlock newBlock = FaweCache.getBlock(value);
             newBlock.setNbtData(block.getNbtData());
             return newBlock;
         }

@@ -98,6 +98,7 @@ import com.sk89q.worldedit.world.SimpleWorld;
 import com.sk89q.worldedit.world.World;
 import com.sk89q.worldedit.world.biome.BaseBiome;
 import com.sk89q.worldedit.world.registry.WorldData;
+
 import java.util.*;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -118,14 +119,17 @@ import static com.sk89q.worldedit.regions.Regions.minimumBlockY;
  * using the {@link ChangeSetExtent}.</p>
  */
 public class EditSession extends AbstractDelegateExtent implements HasFaweQueue, SimpleWorld {
-    /**
-     * Used by {@link #setBlock(Vector, BaseBlock, Stage)} to
-     * determine which {@link Extent}s should be bypassed.
-     */
-    public enum Stage {
-        BEFORE_HISTORY, BEFORE_REORDER, BEFORE_CHANGE
-    }
-
+    public static final UUID CONSOLE = UUID.fromString("1-1-3-3-7");
+    public static final BaseBiome nullBiome = new BaseBiome(0);
+    public static final BaseBlock nullBlock = new BaseBlock(0, 0);
+    private static final Vector[] recurseDirections = {
+            PlayerDirection.NORTH.vector(),
+            PlayerDirection.EAST.vector(),
+            PlayerDirection.SOUTH.vector(),
+            PlayerDirection.WEST.vector(),
+            PlayerDirection.UP.vector(),
+            PlayerDirection.DOWN.vector(),};
+    private final int maxY;
     private World world;
     private String worldName;
     private FaweQueue queue;
@@ -139,25 +143,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
     private FaweLimit limit;
     private FawePlayer player;
     private FaweChangeSet changeTask;
-
     private MutableBlockVector mutable = new MutableBlockVector();
-
     private int changes = 0;
     private BlockBag blockBag;
-
-    private final int maxY;
-
-    public static final UUID CONSOLE = UUID.fromString("1-1-3-3-7");
-    public static final BaseBiome nullBiome = new BaseBiome(0);
-    public static final BaseBlock nullBlock = new BaseBlock(0, 0);
-    private static final Vector[] recurseDirections = {
-            PlayerDirection.NORTH.vector(),
-            PlayerDirection.EAST.vector(),
-            PlayerDirection.SOUTH.vector(),
-            PlayerDirection.WEST.vector(),
-            PlayerDirection.UP.vector(),
-            PlayerDirection.DOWN.vector(),};
-
     @Deprecated
     public EditSession(@Nonnull World world, @Nullable FaweQueue queue, @Nullable FawePlayer player, @Nullable FaweLimit limit, @Nullable FaweChangeSet changeSet, @Nullable RegionWrapper[] allowedRegions, @Nullable Boolean autoQueue, @Nullable Boolean fastmode, @Nullable Boolean checkMemory, @Nullable Boolean combineStages, @Nullable BlockBag blockBag, @Nullable EventBus bus, @Nullable EditSessionEvent event) {
         this(null, world, queue, player, limit, changeSet, allowedRegions, autoQueue, fastmode, checkMemory, combineStages, blockBag, bus, event);
@@ -234,12 +222,12 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             combineStages =
                     // If it's enabled in the settings
                     Settings.IMP.HISTORY.COMBINE_STAGES
-                    // If fast placement is disabled, it's slower to perform a copy on each chunk
-                    && this.limit.FAST_PLACEMENT
-                    // If the specific queue doesn't support it
-                    && queue.supports(FaweQueue.Capability.CHANGE_TASKS)
-                    // If the edit uses items from the inventory we can't use a delayed task
-                    && this.blockBag == null;
+                            // If fast placement is disabled, it's slower to perform a copy on each chunk
+                            && this.limit.FAST_PLACEMENT
+                            // If the specific queue doesn't support it
+                            && queue.supports(FaweQueue.Capability.CHANGE_TASKS)
+                            // If the edit uses items from the inventory we can't use a delayed task
+                            && this.blockBag == null;
         }
         if (Settings.IMP.EXPERIMENTAL.ANVIL_QUEUE_MODE && !(queue instanceof MCAQueue)) {
             queue = new MCAQueue(queue);
@@ -362,6 +350,10 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      */
     public EditSession(final EventBus eventBus, World world, final int maxBlocks, @Nullable final BlockBag blockBag, EditSessionEvent event) {
         this(world, null, null, null, null, null, true, null, null, null, blockBag, eventBus, event);
+    }
+
+    public static Class<?> inject() {
+        return EditSession.class;
     }
 
     /**
@@ -577,20 +569,6 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         return changeTask != null ? changeTask : history != null ? history.getChangeSet() : null;
     }
 
-    public FaweChangeSet getChangeTask() {
-        return changeTask;
-    }
-
-    /**
-     * Set the ChangeSet without hooking into any recording mechanism or triggering any actions.<br/>
-     * Used internally to set the ChangeSet during completion to record custom changes which aren't normally recorded
-     * @param set
-     */
-    public void setRawChangeSet(@Nullable FaweChangeSet set) {
-        changeTask = set;
-        changes++;
-    }
-
     /**
      * Change the ChangeSet being used for this EditSession
      * - If history is disabled, no changeset can be set
@@ -608,6 +586,21 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                 set.addChangeTask(queue);
             }
         }
+        changes++;
+    }
+
+    public FaweChangeSet getChangeTask() {
+        return changeTask;
+    }
+
+    /**
+     * Set the ChangeSet without hooking into any recording mechanism or triggering any actions.<br/>
+     * Used internally to set the ChangeSet during completion to record custom changes which aren't normally recorded
+     *
+     * @param set
+     */
+    public void setRawChangeSet(@Nullable FaweChangeSet set) {
+        changeTask = set;
         changes++;
     }
 
@@ -664,79 +657,6 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
     }
 
     /**
-     * Get the mask.
-     *
-     * @return mask, may be null
-     */
-    public Mask getSourceMask() {
-        ExtentTraverser<SourceMaskExtent> maskingExtent = new ExtentTraverser(this.extent).find(SourceMaskExtent.class);
-        return maskingExtent != null ? maskingExtent.get().getMask() : null;
-    }
-
-    public void addTransform(ResettableExtent transform) {
-        wrapped = true;
-        if (transform == null) {
-            ExtentTraverser<AbstractDelegateExtent> traverser = new ExtentTraverser(this.extent).find(ResettableExtent.class);
-            AbstractDelegateExtent next = extent;
-            while (traverser != null && traverser.get() instanceof ResettableExtent) {
-                traverser = traverser.next();
-                next = traverser.get();
-            }
-            this.extent = next;
-            return;
-        } else {
-            this.extent = transform.setExtent(extent);
-        }
-    }
-
-    public @Nullable ResettableExtent getTransform() {
-        ExtentTraverser<AbstractDelegateExtent> traverser = new ExtentTraverser(this.extent).find(ResettableExtent.class);
-        if (traverser != null) {
-            return (ResettableExtent) traverser.get();
-        }
-        return null;
-    }
-
-    /**
-     * Set a mask.
-     *
-     * @param mask mask or null
-     */
-    public void setSourceMask(Mask mask) {
-        if (mask == null) {
-            mask = Masks.alwaysTrue();
-        } else {
-            new MaskTraverser(mask).reset(this);
-        }
-        ExtentTraverser<SourceMaskExtent> maskingExtent = new ExtentTraverser(this.extent).find(SourceMaskExtent.class);
-        if (maskingExtent != null && maskingExtent.get() != null) {
-            Mask oldMask = maskingExtent.get().getMask();
-            if (oldMask instanceof ResettableMask) {
-                ((ResettableMask) oldMask).reset();
-            }
-            maskingExtent.get().setMask(mask);
-        } else if (mask != Masks.alwaysTrue()) {
-            this.extent = new SourceMaskExtent(this.extent, mask);
-        }
-    }
-
-    public void addSourceMask(Mask mask) {
-        checkNotNull(mask);
-        Mask existing = getSourceMask();
-        if (existing != null) {
-            if (existing instanceof MaskIntersection) {
-                ((MaskIntersection) existing).add(mask);
-                return;
-            } else {
-                MaskIntersection intersection = new MaskIntersection(existing);
-                intersection.add(mask);
-                mask = intersection;
-            }
-        }
-        setSourceMask(mask);
-    }
-
-    /**
      * Set a mask.
      *
      * @param mask mask or null
@@ -772,6 +692,79 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         } else {
             this.setMask(Masks.wrap(mask));
         }
+    }
+
+    /**
+     * Get the mask.
+     *
+     * @return mask, may be null
+     */
+    public Mask getSourceMask() {
+        ExtentTraverser<SourceMaskExtent> maskingExtent = new ExtentTraverser(this.extent).find(SourceMaskExtent.class);
+        return maskingExtent != null ? maskingExtent.get().getMask() : null;
+    }
+
+    /**
+     * Set a mask.
+     *
+     * @param mask mask or null
+     */
+    public void setSourceMask(Mask mask) {
+        if (mask == null) {
+            mask = Masks.alwaysTrue();
+        } else {
+            new MaskTraverser(mask).reset(this);
+        }
+        ExtentTraverser<SourceMaskExtent> maskingExtent = new ExtentTraverser(this.extent).find(SourceMaskExtent.class);
+        if (maskingExtent != null && maskingExtent.get() != null) {
+            Mask oldMask = maskingExtent.get().getMask();
+            if (oldMask instanceof ResettableMask) {
+                ((ResettableMask) oldMask).reset();
+            }
+            maskingExtent.get().setMask(mask);
+        } else if (mask != Masks.alwaysTrue()) {
+            this.extent = new SourceMaskExtent(this.extent, mask);
+        }
+    }
+
+    public void addTransform(ResettableExtent transform) {
+        wrapped = true;
+        if (transform == null) {
+            ExtentTraverser<AbstractDelegateExtent> traverser = new ExtentTraverser(this.extent).find(ResettableExtent.class);
+            AbstractDelegateExtent next = extent;
+            while (traverser != null && traverser.get() instanceof ResettableExtent) {
+                traverser = traverser.next();
+                next = traverser.get();
+            }
+            this.extent = next;
+            return;
+        } else {
+            this.extent = transform.setExtent(extent);
+        }
+    }
+
+    public @Nullable ResettableExtent getTransform() {
+        ExtentTraverser<AbstractDelegateExtent> traverser = new ExtentTraverser(this.extent).find(ResettableExtent.class);
+        if (traverser != null) {
+            return (ResettableExtent) traverser.get();
+        }
+        return null;
+    }
+
+    public void addSourceMask(Mask mask) {
+        checkNotNull(mask);
+        Mask existing = getSourceMask();
+        if (existing != null) {
+            if (existing instanceof MaskIntersection) {
+                ((MaskIntersection) existing).add(mask);
+                return;
+            } else {
+                MaskIntersection intersection = new MaskIntersection(existing);
+                intersection.add(mask);
+                mask = intersection;
+            }
+        }
+        setSourceMask(mask);
     }
 
     /**
@@ -1167,7 +1160,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      * @throws MaxChangedBlocksException thrown if too many blocks are changed
      */
     public boolean setChanceBlockIfAir(final Vector position, final BaseBlock block, final double probability) {
-        return (FaweCache.RANDOM.random(65536) <= (probability * 65536)) && this.setBlockIfAir(position, block);
+        return (FaweCache.getRandom().random(65536) <= (probability * 65536)) && this.setBlockIfAir(position, block);
     }
 
     /**
@@ -1297,7 +1290,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         if (used.MAX_FAILS > 0) {
             if (used.MAX_CHANGES > 0 || used.MAX_ENTITIES > 0) {
                 BBC.WORLDEDIT_SOME_FAILS.send(player, used.MAX_FAILS);
-            } else if (new ExtentTraverser(this).findAndGet(FaweRegionExtent.class) != null){
+            } else if (new ExtentTraverser(this).findAndGet(FaweRegionExtent.class) != null) {
                 BBC.WORLDEDIT_CANCEL_REASON_OUTSIDE_REGION.send(player);
             } else {
                 BBC.WORLDEDIT_CANCEL_REASON_OUTSIDE_LEVEL.send(player);
@@ -1423,7 +1416,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      * Fills an area recursively in the X/Z directions.
      *
      * @param origin    the location to start from
-     * @param pattern     the block to fill with
+     * @param pattern   the block to fill with
      * @param radius    the radius of the spherical area to fill
      * @param depth     the maximum depth, starting from the origin
      * @param direction the direction to fill
@@ -2732,7 +2725,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                         continue;
                     }
                     // The gods don't want a tree here
-                    if (FaweCache.RANDOM.random(65536) >= (density * 65536)) {
+                    if (FaweCache.getRandom().random(65536) >= (density * 65536)) {
                         continue;
                     } // def 0.05
                     this.changes++;
@@ -2864,7 +2857,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         for (int i = 0; i < counter.length; i++) {
             int count = counter[i];
             if (count != 0) {
-                distribution.add(new Countable<BaseBlock>(FaweCache.CACHE_BLOCK[i], count));
+                distribution.add(new Countable<BaseBlock>(FaweCache.getBlock(i), count));
             }
         }
         // Collections.reverse(distribution);
@@ -2937,7 +2930,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     int yv = (int) (y.getValue() * unit.getY() + zero2.getY());
                     int zv = (int) (z.getValue() * unit.getZ() + zero2.getZ());
                     // read block from world
-                    BaseBlock material = FaweCache.CACHE_BLOCK[queue.getCombinedId4DataDebug(xv, yv, zv, 0, EditSession.this)];
+                    BaseBlock material = FaweCache.getBlock(queue.getCombinedId4DataDebug(xv, yv, zv, 0, EditSession.this));
                     // queue operation
                     return setBlockFast(position, material);
                 } catch (EvaluationException e) {
@@ -3396,7 +3389,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                                     try {
                                         Vector loc = new Vector(xx, y, zz);
                                         BaseBlock block = getLazyBlock(loc);
-                                        fcs.add(loc, block, FaweCache.CACHE_BLOCK[0]);
+                                        fcs.add(loc, block, FaweCache.getBlock(0));
                                     } catch (Throwable e) {
                                         fcs.add(xx, y, zz, from, 0);
                                     }
@@ -3433,7 +3426,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                                     } else {
                                         try {
                                             BaseBlock block = getLazyBlock(mutable);
-                                            fcs.add(mutable, block, FaweCache.CACHE_BLOCK[0]);
+                                            fcs.add(mutable, block, FaweCache.getBlock(0));
                                         } catch (Throwable e) {
                                             fcs.add(xx, y, zz, from, 0);
                                         }
@@ -3497,7 +3490,11 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         return false;
     }
 
-    public static Class<?> inject() {
-        return EditSession.class;
+    /**
+     * Used by {@link #setBlock(Vector, BaseBlock, Stage)} to
+     * determine which {@link Extent}s should be bypassed.
+     */
+    public enum Stage {
+        BEFORE_HISTORY, BEFORE_REORDER, BEFORE_CHANGE
     }
 }

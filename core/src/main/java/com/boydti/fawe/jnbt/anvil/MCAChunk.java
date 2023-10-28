@@ -12,6 +12,7 @@ import com.boydti.fawe.util.MainUtil;
 import com.boydti.fawe.util.MathMan;
 import com.boydti.fawe.util.ReflectionUtils;
 import com.sk89q.jnbt.*;
+
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -89,6 +90,85 @@ public class MCAChunk extends FaweChunk<Void> {
         }
     }
 
+    public MCAChunk(NBTInputStream nis, FaweQueue parent, int x, int z, boolean readPos) throws IOException {
+        super(parent, x, z);
+        ids = new byte[16][];
+        data = new byte[16][];
+        skyLight = new byte[16][];
+        blockLight = new byte[16][];
+        NBTStreamer streamer = new NBTStreamer(nis);
+        streamer.addReader(".Level.InhabitedTime", new RunnableVal2<Integer, Long>() {
+            @Override
+            public void run(Integer index, Long value) {
+                inhabitedTime = value;
+            }
+        });
+        streamer.addReader(".Level.LastUpdate", new RunnableVal2<Integer, Long>() {
+            @Override
+            public void run(Integer index, Long value) {
+                lastUpdate = value;
+            }
+        });
+        streamer.addReader(".Level.Sections.#", new RunnableVal2<Integer, CompoundTag>() {
+            @Override
+            public void run(Integer index, CompoundTag tag) {
+                int layer = tag.getByte("Y");
+                ids[layer] = tag.getByteArray("Blocks");
+                data[layer] = tag.getByteArray("Data");
+                skyLight[layer] = tag.getByteArray("SkyLight");
+                blockLight[layer] = tag.getByteArray("BlockLight");
+            }
+        });
+        streamer.addReader(".Level.TileEntities.#", new RunnableVal2<Integer, CompoundTag>() {
+            @Override
+            public void run(Integer index, CompoundTag tile) {
+                int x = tile.getInt("x") & 15;
+                int y = tile.getInt("y");
+                int z = tile.getInt("z") & 15;
+                short pair = MathMan.tripleBlockCoord(x, y, z);
+                tiles.put(pair, tile);
+            }
+        });
+        streamer.addReader(".Level.Entities.#", new RunnableVal2<Integer, CompoundTag>() {
+            @Override
+            public void run(Integer index, CompoundTag entityTag) {
+                if (entities == null) {
+                    entities = new HashMap<UUID, CompoundTag>();
+                }
+                long least = entityTag.getLong("UUIDLeast");
+                long most = entityTag.getLong("UUIDMost");
+                entities.put(new UUID(most, least), entityTag);
+            }
+        });
+        streamer.addReader(".Level.Biomes", new RunnableVal2<Integer, byte[]>() {
+            @Override
+            public void run(Integer index, byte[] value) {
+                biomes = value;
+            }
+        });
+        streamer.addReader(".Level.HeightMap", new RunnableVal2<Integer, int[]>() {
+            @Override
+            public void run(Integer index, int[] value) {
+                heightMap = value;
+            }
+        });
+        if (readPos) {
+            streamer.addReader(".Level.xPos", new RunnableVal2<Integer, Integer>() {
+                @Override
+                public void run(Integer index, Integer value) {
+                    MCAChunk.this.setLoc(getParent(), value, getZ());
+                }
+            });
+            streamer.addReader(".Level.zPos", new RunnableVal2<Integer, Integer>() {
+                @Override
+                public void run(Integer index, Integer value) {
+                    MCAChunk.this.setLoc(getParent(), getX(), value);
+                }
+            });
+        }
+        streamer.readFully();
+    }
+
     public void write(NBTOutputStream nbtOut) throws IOException {
         nbtOut.writeNamedTagName("", NBTConstants.TYPE_COMPOUND);
         nbtOut.writeLazyCompoundTag("Level", new NBTOutputStream.LazyWrite() {
@@ -155,12 +235,12 @@ public class MCAChunk extends FaweChunk<Void> {
         return inhabitedTime;
     }
 
-    public long getLastUpdate() {
-        return lastUpdate;
-    }
-
     public void setInhabitedTime(long inhabitedTime) {
         this.inhabitedTime = inhabitedTime;
+    }
+
+    public long getLastUpdate() {
+        return lastUpdate;
     }
 
     public void setLastUpdate(long lastUpdate) {
@@ -456,85 +536,6 @@ public class MCAChunk extends FaweChunk<Void> {
         return FaweCache.asTag(root);
     }
 
-    public MCAChunk(NBTInputStream nis, FaweQueue parent, int x, int z, boolean readPos) throws IOException {
-        super(parent, x, z);
-        ids = new byte[16][];
-        data = new byte[16][];
-        skyLight = new byte[16][];
-        blockLight = new byte[16][];
-        NBTStreamer streamer = new NBTStreamer(nis);
-        streamer.addReader(".Level.InhabitedTime", new RunnableVal2<Integer, Long>() {
-            @Override
-            public void run(Integer index, Long value) {
-                inhabitedTime = value;
-            }
-        });
-        streamer.addReader(".Level.LastUpdate", new RunnableVal2<Integer, Long>() {
-            @Override
-            public void run(Integer index, Long value) {
-                lastUpdate = value;
-            }
-        });
-        streamer.addReader(".Level.Sections.#", new RunnableVal2<Integer, CompoundTag>() {
-            @Override
-            public void run(Integer index, CompoundTag tag) {
-                int layer = tag.getByte("Y");
-                ids[layer] = tag.getByteArray("Blocks");
-                data[layer] = tag.getByteArray("Data");
-                skyLight[layer] = tag.getByteArray("SkyLight");
-                blockLight[layer] = tag.getByteArray("BlockLight");
-            }
-        });
-        streamer.addReader(".Level.TileEntities.#", new RunnableVal2<Integer, CompoundTag>() {
-            @Override
-            public void run(Integer index, CompoundTag tile) {
-                int x = tile.getInt("x") & 15;
-                int y = tile.getInt("y");
-                int z = tile.getInt("z") & 15;
-                short pair = MathMan.tripleBlockCoord(x, y, z);
-                tiles.put(pair, tile);
-            }
-        });
-        streamer.addReader(".Level.Entities.#", new RunnableVal2<Integer, CompoundTag>() {
-            @Override
-            public void run(Integer index, CompoundTag entityTag) {
-                if (entities == null) {
-                    entities = new HashMap<UUID, CompoundTag>();
-                }
-                long least = entityTag.getLong("UUIDLeast");
-                long most = entityTag.getLong("UUIDMost");
-                entities.put(new UUID(most, least), entityTag);
-            }
-        });
-        streamer.addReader(".Level.Biomes", new RunnableVal2<Integer, byte[]>() {
-            @Override
-            public void run(Integer index, byte[] value) {
-                biomes = value;
-            }
-        });
-        streamer.addReader(".Level.HeightMap", new RunnableVal2<Integer, int[]>() {
-            @Override
-            public void run(Integer index, int[] value) {
-                heightMap = value;
-            }
-        });
-        if (readPos) {
-            streamer.addReader(".Level.xPos", new RunnableVal2<Integer, Integer>() {
-                @Override
-                public void run(Integer index, Integer value) {
-                    MCAChunk.this.setLoc(getParent(), value, getZ());
-                }
-            });
-            streamer.addReader(".Level.zPos", new RunnableVal2<Integer, Integer>() {
-                @Override
-                public void run(Integer index, Integer value) {
-                    MCAChunk.this.setLoc(getParent(), getX(), value);
-                }
-            });
-        }
-        streamer.readFully();
-    }
-
     public long filterBlocks(MutableMCABackedBaseBlock mutableBlock, MCAFilter filter) {
         MutableLong result = new MutableLong();
         mutableBlock.setChunk(this);
@@ -570,13 +571,13 @@ public class MCAChunk extends FaweChunk<Void> {
         return heightMap;
     }
 
+    public boolean isDeleted() {
+        return deleted;
+    }
+
     public void setDeleted(boolean deleted) {
         setModified();
         this.deleted = deleted;
-    }
-
-    public boolean isDeleted() {
-        return deleted;
     }
 
     public boolean isModified() {
@@ -663,7 +664,7 @@ public class MCAChunk extends FaweChunk<Void> {
         if (idLayer == null) {
             return 0;
         }
-        int j = FaweCache.CACHE_J[y][z & 15][x & 15];
+        int j = FaweCache.getJ(y, z & 15, x & 15);
         int id = idLayer[j] & 0xFF;
         if (FaweCache.hasData(id)) {
             byte[] dataLayer = data[layer];
@@ -691,7 +692,7 @@ public class MCAChunk extends FaweChunk<Void> {
         if (skyLayer == null) {
             return;
         }
-        int index = FaweCache.CACHE_J[y][z & 15][x & 15];
+        int index = FaweCache.getJ(y, z & 15, x & 15);
         setNibble(index, skyLayer, value);
     }
 
@@ -702,7 +703,7 @@ public class MCAChunk extends FaweChunk<Void> {
         if (blockLayer == null) {
             return;
         }
-        int index = FaweCache.CACHE_J[y][z & 15][x & 15];
+        int index = FaweCache.getJ(y, z & 15, x & 15);
         setNibble(index, blockLayer, value);
     }
 
@@ -712,7 +713,7 @@ public class MCAChunk extends FaweChunk<Void> {
         if (skyLayer == null) {
             return 0;
         }
-        int index = FaweCache.CACHE_J[y][z & 15][x & 15];
+        int index = FaweCache.getJ(y, z & 15, x & 15);
         return getNibble(index, skyLayer);
     }
 
@@ -722,7 +723,7 @@ public class MCAChunk extends FaweChunk<Void> {
         if (blockLayer == null) {
             return 0;
         }
-        int index = FaweCache.CACHE_J[y][z & 15][x & 15];
+        int index = FaweCache.getJ(y, z & 15, x & 15);
         return getNibble(index, blockLayer);
     }
 
@@ -794,7 +795,7 @@ public class MCAChunk extends FaweChunk<Void> {
             this.skyLight[layer] = new byte[2048];
             this.blockLight[layer] = new byte[2048];
         }
-        int j = FaweCache.CACHE_J[y][z & 15][x & 15];
+        int j = FaweCache.getJ(y, z & 15, x & 15);
         idsLayer[j] = (byte) id;
         byte[] dataLayer = this.data[layer];
         setNibble(j, dataLayer, data);
@@ -854,6 +855,7 @@ public class MCAChunk extends FaweChunk<Void> {
 
     /**
      * Check if the ids match the ids in the other chunk
+     *
      * @param other
      * @param matchNullToAir
      * @return

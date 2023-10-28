@@ -15,8 +15,8 @@ import com.boydti.fawe.util.*;
 import com.boydti.fawe.util.image.Drawable;
 import com.boydti.fawe.util.image.ImageViewer;
 import com.sk89q.jnbt.CompoundTag;
-import com.sk89q.worldedit.*;
 import com.sk89q.worldedit.Vector;
+import com.sk89q.worldedit.*;
 import com.sk89q.worldedit.blocks.BaseBlock;
 import com.sk89q.worldedit.blocks.BaseItemStack;
 import com.sk89q.worldedit.blocks.BlockID;
@@ -33,68 +33,62 @@ import com.sk89q.worldedit.util.TreeGenerator;
 import com.sk89q.worldedit.world.World;
 import com.sk89q.worldedit.world.biome.BaseBiome;
 import com.sk89q.worldedit.world.registry.WorldData;
+
+import javax.annotation.Nullable;
 import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.*;
-import javax.annotation.Nullable;
 
 public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Drawable, VirtualWorld {
+    protected final DifferentialArray<byte[]> heights;
+    protected final DifferentialArray<byte[]> biomes;
+    protected final DifferentialArray<char[]> floor;
+    protected final DifferentialArray<char[]> main;
+    protected final CFIPrimtives primtives = new CFIPrimtives();
     private final MutableBlockVector mutable = new MutableBlockVector();
-
     private final ThreadLocal<int[]> indexStore = new ThreadLocal<int[]>() {
         @Override
         protected int[] initialValue() {
             return new int[256];
         }
     };
-
     private final DifferentialBlockBuffer blocks;
-    protected final DifferentialArray<byte[]> heights;
-    protected final DifferentialArray<byte[]> biomes;
-    protected final DifferentialArray<char[]> floor;
-    protected final DifferentialArray<char[]> main;
     protected DifferentialArray<char[]> overlay;
-
-    protected final CFIPrimtives primtives = new CFIPrimtives();
-    private CFIPrimtives oldPrimitives = new CFIPrimtives();
-
-    public final class CFIPrimtives implements Cloneable {
-        protected int waterHeight = 0;
-        protected int floorThickness = 0;
-        protected int worldThickness = 0;
-        protected boolean randomVariation = true;
-        protected int biomePriority = 0;
-        protected byte waterId = BlockID.STATIONARY_WATER;
-        protected byte bedrockId = 7;
-        protected boolean modifiedMain = false;
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || !(obj instanceof CFIPrimtives)) {
-                return false;
-            }
-            try {
-                for (Field field : CFIPrimtives.class.getDeclaredFields()) {
-                    if (field.get(this) != field.get(obj)) return false;
-                }
-            } catch (IllegalAccessException e) {
-                e.printStackTrace();
-            }
-            return true;
-        }
-
-        @Override
-        protected Object clone() throws CloneNotSupportedException {
-            return super.clone();
-        }
-    }
-
-
     protected Metadatable metaData = new Metadatable();
     protected TextureUtil textureUtil;
+    private CFIPrimtives oldPrimitives = new CFIPrimtives();
+    // Used for visualizing the world on a map
+    private ImageViewer viewer;
+    // Used for visualizing the world by sending chunk packets
+    // These three variables should be set together
+//    private FaweQueue packetQueue;
+    private FawePlayer player;
+    private Vector2D chunkOffset = Vector2D.ZERO;
+    private EditSession editSession;
+
+    public HeightMapMCAGenerator(BufferedImage img, File regionFolder) {
+        this(img.getWidth(), img.getHeight(), regionFolder);
+        setHeight(img);
+    }
+
+    public HeightMapMCAGenerator(int width, int length, File regionFolder) {
+        super(width, length, regionFolder);
+        int area = getArea();
+
+        blocks = new DifferentialBlockBuffer(width, length);
+        heights = new DifferentialArray(new byte[getArea()]);
+        biomes = new DifferentialArray(new byte[getArea()]);
+        floor = new DifferentialArray(new char[getArea()]);
+        main = new DifferentialArray(new char[getArea()]);
+
+        char stone = (char) FaweCache.getCombined(1, 0);
+        char grass = (char) FaweCache.getCombined(2, 0);
+        Arrays.fill(main.getCharArray(), stone);
+        Arrays.fill(floor.getCharArray(), grass);
+    }
 
     @Override
     public void flushChanges(FaweOutputStream out) throws IOException {
@@ -116,7 +110,9 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
                 }
             }
             resetPrimtives();
-        } catch (Throwable neverHappens) { neverHappens.printStackTrace(); }
+        } catch (Throwable neverHappens) {
+            neverHappens.printStackTrace();
+        }
 
         blocks.flushChanges(out);
     }
@@ -148,7 +144,9 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
                 }
             }
             resetPrimtives();
-        } catch (Throwable neverHappens) { neverHappens.printStackTrace(); }
+        } catch (Throwable neverHappens) {
+            neverHappens.printStackTrace();
+        }
         blocks.undoChanges(in);
     }
 
@@ -168,7 +166,9 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
                 }
             }
             resetPrimtives();
-        } catch (Throwable neverHappens) { neverHappens.printStackTrace(); }
+        } catch (Throwable neverHappens) {
+            neverHappens.printStackTrace();
+        }
 
         blocks.clearChanges(); // blocks.redoChanges(in); Unsupported
     }
@@ -178,41 +178,11 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
         session.setFastMode(true);
         this.editSession = session;
     }
+    // end
 
     @Override
     public boolean supports(Capability capability) {
         return false;
-    }
-
-    // Used for visualizing the world on a map
-    private ImageViewer viewer;
-    // Used for visualizing the world by sending chunk packets
-    // These three variables should be set together
-//    private FaweQueue packetQueue;
-    private FawePlayer player;
-    private Vector2D chunkOffset = Vector2D.ZERO;
-    private EditSession editSession;
-    // end
-
-    public HeightMapMCAGenerator(BufferedImage img, File regionFolder) {
-        this(img.getWidth(), img.getHeight(), regionFolder);
-        setHeight(img);
-    }
-
-    public HeightMapMCAGenerator(int width, int length, File regionFolder) {
-        super(width, length, regionFolder);
-        int area = getArea();
-
-        blocks = new DifferentialBlockBuffer(width, length);
-        heights = new DifferentialArray(new byte[getArea()]);
-        biomes = new DifferentialArray(new byte[getArea()]);
-        floor = new DifferentialArray(new char[getArea()]);
-        main = new DifferentialArray(new char[getArea()]);
-
-        char stone = (char) FaweCache.getCombined(1, 0);
-        char grass = (char) FaweCache.getCombined(2, 0);
-        Arrays.fill(main.getCharArray(), stone);
-        Arrays.fill(floor.getCharArray(), grass);
     }
 
     public Metadatable getMetaData() {
@@ -252,12 +222,12 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
         return arr != null ? arr[x] : null;
     }
 
-    public void setImageViewer(ImageViewer viewer) {
-        this.viewer = viewer;
-    }
-
     public ImageViewer getImageViewer() {
         return viewer;
+    }
+
+    public void setImageViewer(ImageViewer viewer) {
+        this.viewer = viewer;
     }
 
     @Override
@@ -331,6 +301,10 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
         }
     }
 
+    public void setTextureUtil(TextureUtil textureUtil) {
+        this.textureUtil = textureUtil;
+    }
+
     public void setBedrockId(int bedrockId) {
         this.primtives.bedrockId = (byte) bedrockId;
     }
@@ -351,16 +325,12 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
         this.primtives.waterId = (byte) waterId;
     }
 
-    public void setTextureRandomVariation(boolean randomVariation) {
-        this.primtives.randomVariation = randomVariation;
-    }
-
     public boolean getTextureRandomVariation() {
         return this.primtives.randomVariation;
     }
 
-    public void setTextureUtil(TextureUtil textureUtil) {
-        this.textureUtil = textureUtil;
+    public void setTextureRandomVariation(boolean randomVariation) {
+        this.primtives.randomVariation = randomVariation;
     }
 
     public void smooth(BufferedImage img, boolean white, int radius, int iterations) {
@@ -543,13 +513,13 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
     }
 
     public void addCaves() throws WorldEditException {
-        CuboidRegion region = new CuboidRegion(new Vector(0, 0, 0), new Vector(getWidth() -1, 255, getLength() -1));
+        CuboidRegion region = new CuboidRegion(new Vector(0, 0, 0), new Vector(getWidth() - 1, 255, getLength() - 1));
         addCaves(region);
     }
 
     @Deprecated
     public void addSchems(Mask mask, WorldData worldData, List<ClipboardHolder> clipboards, int rarity, boolean rotate) throws WorldEditException {
-        CuboidRegion region = new CuboidRegion(new Vector(0, 0, 0), new Vector(getWidth() -1, 255, getLength() -1));
+        CuboidRegion region = new CuboidRegion(new Vector(0, 0, 0), new Vector(getWidth() - 1, 255, getLength() - 1));
         addSchems(region, mask, worldData, clipboards, rarity, rotate);
     }
 
@@ -654,12 +624,12 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
     }
 
     public void addOre(Mask mask, Pattern material, int size, int frequency, int rarity, int minY, int maxY) throws WorldEditException {
-        CuboidRegion region = new CuboidRegion(new Vector(0, 0, 0), new Vector(getWidth() -1, 255, getLength() -1));
+        CuboidRegion region = new CuboidRegion(new Vector(0, 0, 0), new Vector(getWidth() - 1, 255, getLength() - 1));
         addOre(region, mask, material, size, frequency, rarity, minY, maxY);
     }
 
     public void addDefaultOres(Mask mask) throws WorldEditException {
-        addOres(new CuboidRegion(new Vector(0, 0, 0), new Vector(getWidth() -1, 255, getLength() -1)), mask);
+        addOres(new CuboidRegion(new Vector(0, 0, 0), new Vector(getWidth() - 1, 255, getLength() - 1)), mask);
     }
 
     @Override
@@ -1009,7 +979,7 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
 
     @Override
     public BaseBiome getBiome(Vector2D position) {
-        return FaweCache.CACHE_BIOME[getBiomeId(position.getBlockX(), position.getBlockZ())];
+        return FaweCache.getBiome(getBiomeId(position.getBlockX(), position.getBlockZ()));
     }
 
     @Override
@@ -1019,7 +989,7 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
 
     public BaseBlock getFloor(int x, int z) {
         int index = z * getWidth() + x;
-        return FaweCache.CACHE_BLOCK[floor.getChar(index)];
+        return FaweCache.getBlock(floor.getChar(index));
     }
 
     public int getHeight(int x, int z) {
@@ -1043,7 +1013,7 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
 
     @Override
     public BaseBlock getLazyBlock(int x, int y, int z) {
-        return FaweCache.CACHE_BLOCK[getCombinedId4Data(x, y, z)];
+        return FaweCache.getBlock(getCombinedId4Data(x, y, z));
     }
 
     @Override
@@ -1091,12 +1061,12 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
         return new HeightMapMCADrawer(this).draw();
     }
 
-    public void setBiomePriority(int value) {
-        this.primtives.biomePriority = ((value * 65536) / 100) - 32768;
-    }
-
     public int getBiomePriority() {
         return ((primtives.biomePriority + 32768) * 100) / 65536;
+    }
+
+    public void setBiomePriority(int value) {
+        this.primtives.biomePriority = ((value * 65536) / 100) - 32768;
     }
 
     public void setBlockAndBiomeColor(BufferedImage img, Mask mask, BufferedImage imgMask, boolean whiteOnly) {
@@ -1129,7 +1099,8 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
                     }
                     if (imgMask != null) {
                         int height = imgMask.getRGB(x, z) & 0xFF;
-                        if (height != 255 && (height <= 0 || !whiteOnly || PseudoRandom.random.nextInt(256) > height)) continue;
+                        if (height != 255 && (height <= 0 || !whiteOnly || PseudoRandom.random.nextInt(256) > height))
+                            continue;
                     }
                     int color = img.getRGB(x, z);
                     if (textureUtil.getIsBlockCloserThanBiome(buffer, color, primtives.biomePriority)) {
@@ -2173,13 +2144,13 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
     }
 
     @Override
-    public void setChangeTask(RunnableVal2<FaweChunk, FaweChunk> changeTask) {
-
+    public RunnableVal2<FaweChunk, FaweChunk> getChangeTask() {
+        return null;
     }
 
     @Override
-    public RunnableVal2<FaweChunk, FaweChunk> getChangeTask() {
-        return null;
+    public void setChangeTask(RunnableVal2<FaweChunk, FaweChunk> changeTask) {
+
     }
 
     @Override
@@ -2264,5 +2235,36 @@ public class HeightMapMCAGenerator extends MCAWriter implements StreamChange, Dr
     public WorldData getWorldData() {
         if (player != null) return player.getWorld().getWorldData();
         return null;
+    }
+
+    public final class CFIPrimtives implements Cloneable {
+        protected int waterHeight = 0;
+        protected int floorThickness = 0;
+        protected int worldThickness = 0;
+        protected boolean randomVariation = true;
+        protected int biomePriority = 0;
+        protected byte waterId = BlockID.STATIONARY_WATER;
+        protected byte bedrockId = 7;
+        protected boolean modifiedMain = false;
+
+        @Override
+        public boolean equals(Object obj) {
+            if (obj == null || !(obj instanceof CFIPrimtives)) {
+                return false;
+            }
+            try {
+                for (Field field : CFIPrimtives.class.getDeclaredFields()) {
+                    if (field.get(this) != field.get(obj)) return false;
+                }
+            } catch (IllegalAccessException e) {
+                e.printStackTrace();
+            }
+            return true;
+        }
+
+        @Override
+        protected Object clone() throws CloneNotSupportedException {
+            return super.clone();
+        }
     }
 }
