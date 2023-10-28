@@ -1,0 +1,87 @@
+name: Mod Release (Main/Master Push)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+
+jobs:
+  mod_release:
+    name: Assemble Mod and Release for ${{ matrix.friendlyName }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - module: forge112
+            friendlyName: Forge 1.12
+          # Add other modules and their friendly names as needed
+          # - module: forge189
+          #   friendlyName: Forge 1.8.9
+          # ... and so on
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set Up JDK 1.8
+        uses: actions/setup-java@v3
+        with:
+          distribution: "adopt"
+          java-version: "8"
+
+      - name: Setup Gradle Dependencies Cache
+        uses: actions/cache@v3
+        if: ${{ always() }}
+        with:
+          path: ~/.gradle/caches
+          key: ${{ runner.os }}-gradle-caches-${{ hashFiles('**/*.gradle', '**/*.gradle.kts') }}
+
+      - name: Setup Gradle Wrapper Cache
+        uses: actions/cache@v3
+        if: ${{ always() }}
+        with:
+          path: ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-wrapper-${{ hashFiles('**/gradle/wrapper/gradle-wrapper.properties') }}
+
+      - name: Assemble mod with Gradle for ${{ matrix.friendlyName }}
+        run: ./gradlew ${{ matrix.module }}:shadowJar -Dhttp.socketTimeout=60000 -Dhttp.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000 -Dorg.gradle.internal.http.connectionTimeout=60000
+
+      - name: Save Gradle version to GITHUB_ENV
+        run: echo "version_number=$(${{github.workspace}}/gradlew -q printVersionNumber)" >> $GITHUB_ENV
+
+      - name: Calculate Hashes for the Jar
+        id: calculate-hashes
+        run: |
+          sha1=$(sha1sum ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar | awk '{print $1}')
+          md5=$(md5sum ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar | awk '{print $1}')
+          sha256=$(sha256sum ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar | awk '{print $1}')
+          crc32=$(crc32 ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar)
+          echo "::set-output name=sha1::$sha1"
+          echo "::set-output name=md5::$md5"
+          echo "::set-output name=sha256::$sha256"
+          echo "::set-output name=crc32::$crc32"
+
+      - name: Create release entry with assembled mod .jar
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.version_number }}
+          target_commitish: ${{ github.sha }}
+          name: "${{ matrix.friendlyName }}: ${{ env.version_number }}"
+          body: |
+            Automated Release of LDFAWE
+            Game Version: ${{ matrix.friendlyName }}
+            Mod Version: ${{ env.version_number }}
+
+            SHA-1: `${{ steps.calculate-hashes.outputs.sha1 }}`
+            SHA-256: `${{ steps.calculate-hashes.outputs.sha256 }}`
+            MD5: `${{ steps.calculate-hashes.outputs.md5 }}`
+            CRC-32: `${{ steps.calculate-hashes.outputs.crc32 }}`
+
+            Direct Link: [LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar](https://github.com/Mica-Technologies/LDFAWE/releases/download/${{ env.version_number }}/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar)
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            target/LDFAWE-${{ matrix.module }}-${{env.version_number}}.jar
