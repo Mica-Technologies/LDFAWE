@@ -77,7 +77,7 @@ version = date + revision + buildNumber + semver
 if ( project.hasProperty("lzNoVersion") ) { // gradle build -PlzNoVersion
     version = "unknown"
 }
-description = """FastAsyncWorldEdit"""
+description = """LDFAWE"""
 
 subprojects {
 
@@ -131,5 +131,11 @@ task aggregatedJavadocs(type: Javadoc, description: 'Generate javadocs from all 
             excludes += javadocTask.excludes
             includes += javadocTask.includes
         }
+    }
+}
+
+task printVersionNumber {
+    doLast {
+        println project.version
     }
 }
