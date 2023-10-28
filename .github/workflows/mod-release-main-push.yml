@@ -55,7 +55,7 @@ jobs:
           sha1=$(sha1sum ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar | awk '{print $1}')
           md5=$(md5sum ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar | awk '{print $1}')
           sha256=$(sha256sum ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar | awk '{print $1}')
-          crc32=$(crc32 ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar)
+          crc32=$(cksum ./target/LDFAWE-${{ matrix.module }}-${{ env.version_number }}.jar | awk '{print $1}')
           echo "::set-output name=sha1::$sha1"
           echo "::set-output name=md5::$md5"
           echo "::set-output name=sha256::$sha256"
