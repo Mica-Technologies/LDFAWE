@@ -7,7 +7,7 @@ import com.sk89q.worldedit.extent.Extent;
 public abstract class ConditionalMask extends BlockMask {
     public ConditionalMask(Extent extent) {
         super(extent);
-        for (BaseBlock block : FaweCache.CACHE_BLOCK) {
+        for (BaseBlock block : FaweCache.getBlocks()) {
             if (applies(block)) {
                 add(block);
             }

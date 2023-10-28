@@ -406,8 +406,8 @@ public class NMSRelighter implements Relighter {
             }
         }
 
-        byte[] cacheX = FaweCache.CACHE_X[0];
-        byte[] cacheZ = FaweCache.CACHE_Z[0];
+        byte[] cacheX = FaweCache.getX(0);
+        byte[] cacheZ = FaweCache.getZ(0);
         for (int y = FaweChunk.HEIGHT - 1; y > 0; y--) {
             for (RelightSkyEntry chunk : chunks) { // Propogate skylight
                 int layer = y >> 4;

@@ -2,6 +2,7 @@ package com.boydti.fawe.util;
 
 import com.boydti.fawe.FaweCache;
 import com.sk89q.worldedit.blocks.BaseBlock;
+
 import java.io.FileNotFoundException;
 import java.util.Set;
 
@@ -21,14 +22,14 @@ public class FilteredTextureUtil extends TextureUtil {
         this.validBlockIds = new char[distances.length];
         int num = 0;
         for (int i = 0; i < parent.validBlockIds.length; i++) {
-            BaseBlock block = FaweCache.CACHE_BLOCK[parent.validBlockIds[i]];
+            BaseBlock block = FaweCache.getBlock(parent.validBlockIds[i]);
             if (blocks.contains(block) || blocks.contains(new BaseBlock(block.getId(), -1))) num++;
         }
         this.validBlockIds = new char[num];
         this.validColors = new int[num];
         num = 0;
         for (int i = 0; i < parent.validBlockIds.length; i++) {
-            BaseBlock block = FaweCache.CACHE_BLOCK[parent.validBlockIds[i]];
+            BaseBlock block = FaweCache.getBlock(parent.validBlockIds[i]);
             if (blocks.contains(block) || blocks.contains(new BaseBlock(block.getId(), -1))) {
                 validBlockIds[num] = parent.validBlockIds[i];
                 validColors[num++] = parent.validColors[i];

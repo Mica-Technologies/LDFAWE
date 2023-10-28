@@ -5,11 +5,7 @@ import com.boydti.fawe.object.FaweQueue;
 import com.boydti.fawe.object.HasFaweQueue;
 import com.boydti.fawe.util.MainUtil;
 import com.boydti.fawe.util.ReflectionUtils;
-import com.sk89q.jnbt.CompoundTag;
-import com.sk89q.jnbt.DoubleTag;
-import com.sk89q.jnbt.ListTag;
-import com.sk89q.jnbt.StringTag;
-import com.sk89q.jnbt.Tag;
+import com.sk89q.jnbt.*;
 import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.Vector2D;
 import com.sk89q.worldedit.WorldEditException;
@@ -21,14 +17,15 @@ import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.util.Location;
 import com.sk89q.worldedit.world.World;
 import com.sk89q.worldedit.world.biome.BaseBiome;
+
 import java.util.List;
 import java.util.Map;
 
 public class FastWorldEditExtent extends AbstractDelegateExtent implements HasFaweQueue {
 
     private final World world;
-    private FaweQueue queue;
     private final int maxY;
+    private FaweQueue queue;
 
     public FastWorldEditExtent(final World world, FaweQueue queue) {
         super(queue);
@@ -96,7 +93,7 @@ public class FastWorldEditExtent extends AbstractDelegateExtent implements HasFa
 
     @Override
     public BaseBiome getBiome(final Vector2D position) {
-        return FaweCache.CACHE_BIOME[queue.getBiomeId(position.getBlockX(), position.getBlockZ())];
+        return FaweCache.getBiome(queue.getBiomeId(position.getBlockX(), position.getBlockZ()));
     }
 
     @Override
@@ -114,18 +111,18 @@ public class FastWorldEditExtent extends AbstractDelegateExtent implements HasFa
         int combinedId4Data = queue.getCombinedId4Data(x, y, z, 0);
         int id = FaweCache.getId(combinedId4Data);
         if (!FaweCache.hasNBT(id)) {
-            return FaweCache.CACHE_BLOCK[combinedId4Data];
+            return FaweCache.getBlock(combinedId4Data);
         }
         try {
             CompoundTag tile = queue.getTileEntity(x, y, z);
             if (tile != null) {
                 return new BaseBlock(id, FaweCache.getData(combinedId4Data), tile);
             } else {
-                return FaweCache.CACHE_BLOCK[combinedId4Data];
+                return FaweCache.getBlock(combinedId4Data);
             }
         } catch (Throwable e) {
             MainUtil.handleError(e);
-            return FaweCache.CACHE_BLOCK[combinedId4Data];
+            return FaweCache.getBlock(combinedId4Data);
         }
     }
 

@@ -5,6 +5,7 @@ import com.boydti.fawe.FaweCache;
 import com.boydti.fawe.util.MathMan;
 import com.boydti.fawe.util.TextureUtil;
 import com.sk89q.worldedit.blocks.BlockID;
+
 import java.awt.image.BufferedImage;
 import java.awt.image.DataBufferInt;
 import java.util.concurrent.ForkJoinPool;
@@ -44,7 +45,7 @@ public final class HeightMapMCADrawer {
             int start = i * size;
             int end = Math.min(heights.length, start + size);
             pool.submit((Runnable) () -> {
-                for (int index = start; index < end; index ++) {
+                for (int index = start; index < end; index++) {
                     int height = (heights[index] & 0xFF);
                     char combined;
                     if ((combined = overlay[index]) == 0) {
@@ -65,7 +66,7 @@ public final class HeightMapMCADrawer {
                             color = (0xDD << 16) + (0xDD << 8) + (0xDD << 0);
                             break;
                         default:
-                            color = tu.getColor(FaweCache.CACHE_BLOCK[combined]);
+                            color = tu.getColor(FaweCache.getBlock(combined));
                             break;
                     }
                     int slope = getSlope(heights, width, index, height);
@@ -125,12 +126,12 @@ public final class HeightMapMCADrawer {
 
     private int getSlope(byte[] heights, int width, int index, int height) {
         return (
-                + getHeight(heights, index + 1, height)
+                +getHeight(heights, index + 1, height)
 //                + getHeight(heights, index + width, height)
-                + getHeight(heights, index + width + 1, height)
-                - getHeight(heights, index - 1, height)
+                        + getHeight(heights, index + width + 1, height)
+                        - getHeight(heights, index - 1, height)
 //                - getHeight(heights, index - width, height)
-                - getHeight(heights, index - width - 1, height)
+                        - getHeight(heights, index - width - 1, height)
         );
     }
 

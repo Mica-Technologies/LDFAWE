@@ -14,28 +14,26 @@ import com.sk89q.worldedit.entity.BaseEntity;
 import com.sk89q.worldedit.entity.Entity;
 import com.sk89q.worldedit.extent.Extent;
 import com.sk89q.worldedit.world.biome.BaseBiome;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+
+import java.util.*;
 
 public class CPUOptimizedClipboard extends FaweClipboard {
+    private final HashMap<IntegerTrio, CompoundTag> nbtMapLoc;
+    private final HashMap<Integer, CompoundTag> nbtMapIndex;
+    private final HashSet<ClipboardEntity> entities;
     private int length;
     private int height;
     private int width;
     private int area;
     private int volume;
-
     private byte[] biomes = null;
     private byte[] ids;
     private byte[] datas;
     private byte[] add;
-
-    private final HashMap<IntegerTrio, CompoundTag> nbtMapLoc;
-    private final HashMap<Integer, CompoundTag> nbtMapIndex;
-
-    private final HashSet<ClipboardEntity> entities;
+    private int ylast;
+    private int ylasti;
+    private int zlast;
+    private int zlasti;
 
     public CPUOptimizedClipboard(int width, int height, int length) {
         this.width = width;
@@ -85,7 +83,7 @@ public class CPUOptimizedClipboard extends FaweClipboard {
         if (!hasBiomes()) {
             return EditSession.nullBiome;
         }
-        return FaweCache.CACHE_BIOME[biomes[index] & 0xFF];
+        return FaweCache.getBiome(biomes[index] & 0xFF);
     }
 
     @Override
@@ -122,6 +120,11 @@ public class CPUOptimizedClipboard extends FaweClipboard {
     }
 
     @Override
+    public Vector getDimensions() {
+        return new Vector(width, height, length);
+    }
+
+    @Override
     public void setDimensions(Vector dimensions) {
         width = dimensions.getBlockX();
         height = dimensions.getBlockY();
@@ -133,11 +136,6 @@ public class CPUOptimizedClipboard extends FaweClipboard {
             ids = new byte[volume];
             datas = new byte[volume];
         }
-    }
-
-    @Override
-    public Vector getDimensions() {
-        return new Vector(width, height, length);
     }
 
     @Override
@@ -161,11 +159,6 @@ public class CPUOptimizedClipboard extends FaweClipboard {
         datas[index] = (byte) value;
     }
 
-    private int ylast;
-    private int ylasti;
-    private int zlast;
-    private int zlasti;
-
     public int getIndex(int x, int y, int z) {
         return x + ((ylast == y) ? ylasti : (ylasti = (ylast = y) * area)) + ((zlast == z) ? zlasti : (zlasti = (zlast = z) * width));
     }
@@ -183,7 +176,7 @@ public class CPUOptimizedClipboard extends FaweClipboard {
             id += getAdd(index) << 8;
         }
         if (id == 0) {
-            return FaweCache.CACHE_BLOCK[0];
+            return FaweCache.getBlock(0);
         }
         BaseBlock block;
         if (FaweCache.hasData(id)) {

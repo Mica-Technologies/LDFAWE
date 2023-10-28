@@ -19,9 +19,9 @@ import com.sk89q.worldedit.world.biome.BaseBiome;
 import com.sk89q.worldedit.world.registry.BlockRegistry;
 import com.sk89q.worldedit.world.registry.State;
 import com.sk89q.worldedit.world.registry.StateValue;
-import java.util.Map;
-import javax.annotation.Nullable;
 
+import javax.annotation.Nullable;
+import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -48,11 +48,102 @@ public class BlockTransformExtent extends ResettableExtent {
         cache();
     }
 
+    /**
+     * Transform the given block using the given transform.
+     * <p>
+     * <p>The provided block is modified.</p>
+     *
+     * @param block     the block
+     * @param transform the transform
+     * @param registry  the registry
+     * @return the same block
+     */
+    public static BaseBlock transform(BaseBlock block, Transform transform, BlockRegistry registry) {
+        return transform(block, transform, registry, block);
+    }
+
+    /**
+     * Transform the given block using the given transform.
+     *
+     * @param block        the block
+     * @param transform    the transform
+     * @param registry     the registry
+     * @param changedBlock the block to change
+     * @return the changed block
+     */
+    private static BaseBlock transform(BaseBlock block, Transform transform, BlockRegistry registry, BaseBlock changedBlock) {
+        checkNotNull(block);
+        checkNotNull(transform);
+        checkNotNull(registry);
+
+        Map<String, ? extends State> states = registry.getStates(block);
+
+        if (states == null) {
+            return changedBlock;
+        }
+
+        for (Map.Entry<String, ? extends State> entry : states.entrySet()) {
+            State state = entry.getValue();
+            if (state.hasDirection()) {
+                StateValue value = state.getValue(block);
+                if (value != null && value.getDirection() != null) {
+                    StateValue newValue = getNewStateValue(state, transform, value.getDirection());
+                    if (newValue != null) {
+                        if (changedBlock.isImmutable()) {
+                            changedBlock = new BaseBlock(changedBlock.getId(), changedBlock.getData(), changedBlock.getNbtData());
+                        }
+                        newValue.set(changedBlock);
+                    }
+                }
+            }
+        }
+
+        return changedBlock;
+    }
+
+    /**
+     * Get the new value with the transformed direction.
+     *
+     * @param state        the state
+     * @param transform    the transform
+     * @param oldDirection the old direction to transform
+     * @return a new state or null if none could be found
+     */
+    @Nullable
+    private static StateValue getNewStateValue(State state, Transform transform, Vector oldDirection) {
+        Vector newDirection = new Vector(transform.apply(oldDirection)).subtract(transform.apply(Vector.ZERO)).normalize();
+        StateValue newValue = null;
+        double closest = -2;
+        boolean found = false;
+
+        for (Map.Entry<String, ? extends StateValue> entry : state.valueMap().entrySet()) {
+            StateValue v = entry.getValue();
+            if (v.getDirection() != null) {
+                double dot = v.getDirection().normalize().dot(newDirection);
+                if (dot >= closest) {
+                    closest = dot;
+                    newValue = v;
+                    found = true;
+                }
+            }
+        }
+
+        if (found) {
+            return newValue;
+        } else {
+            return null;
+        }
+    }
+
+    public static Class<?> inject() {
+        return BlockTransformExtent.class;
+    }
+
     private void cache() {
-        BLOCK_TRANSFORM = new BaseBlock[FaweCache.CACHE_BLOCK.length];
-        BLOCK_TRANSFORM_INVERSE = new BaseBlock[FaweCache.CACHE_BLOCK.length];
+        BLOCK_TRANSFORM = new BaseBlock[FaweCache.getBlocksCount()];
+        BLOCK_TRANSFORM_INVERSE = new BaseBlock[FaweCache.getBlocksCount()];
         for (int i = 0; i < BLOCK_TRANSFORM.length; i++) {
-            BaseBlock block = FaweCache.CACHE_BLOCK[i];
+            BaseBlock block = FaweCache.getBlock(i);
             if (block != null) {
                 BLOCK_TRANSFORM[i] = BlockTransformExtent.transform(new BaseBlock(block), transform, registry);
                 BLOCK_TRANSFORM_INVERSE[i] = BlockTransformExtent.transform(new BaseBlock(block), transformInverse, registry);
@@ -158,7 +249,6 @@ public class BlockTransformExtent extends ResettableExtent {
         return super.setBlock(x, y, z, transformFastInverse(block));
     }
 
-
     @Override
     public boolean setBlock(Vector location, BaseBlock block) throws WorldEditException {
         return super.setBlock(location, transformFastInverse(block));
@@ -167,96 +257,5 @@ public class BlockTransformExtent extends ResettableExtent {
     @Override
     public boolean setBiome(Vector2D position, BaseBiome biome) {
         return super.setBiome(position, biome);
-    }
-
-    /**
-     * Transform the given block using the given transform.
-     * <p>
-     * <p>The provided block is modified.</p>
-     *
-     * @param block     the block
-     * @param transform the transform
-     * @param registry  the registry
-     * @return the same block
-     */
-    public static BaseBlock transform(BaseBlock block, Transform transform, BlockRegistry registry) {
-        return transform(block, transform, registry, block);
-    }
-
-    /**
-     * Transform the given block using the given transform.
-     *
-     * @param block        the block
-     * @param transform    the transform
-     * @param registry     the registry
-     * @param changedBlock the block to change
-     * @return the changed block
-     */
-    private static BaseBlock transform(BaseBlock block, Transform transform, BlockRegistry registry, BaseBlock changedBlock) {
-        checkNotNull(block);
-        checkNotNull(transform);
-        checkNotNull(registry);
-
-        Map<String, ? extends State> states = registry.getStates(block);
-
-        if (states == null) {
-            return changedBlock;
-        }
-
-        for (Map.Entry<String, ? extends State> entry : states.entrySet()) {
-            State state = entry.getValue();
-            if (state.hasDirection()) {
-                StateValue value = state.getValue(block);
-                if (value != null && value.getDirection() != null) {
-                    StateValue newValue = getNewStateValue(state, transform, value.getDirection());
-                    if (newValue != null) {
-                        if (changedBlock.isImmutable()) {
-                            changedBlock = new BaseBlock(changedBlock.getId(), changedBlock.getData(), changedBlock.getNbtData());
-                        }
-                        newValue.set(changedBlock);
-                    }
-                }
-            }
-        }
-
-        return changedBlock;
-    }
-
-    /**
-     * Get the new value with the transformed direction.
-     *
-     * @param state        the state
-     * @param transform    the transform
-     * @param oldDirection the old direction to transform
-     * @return a new state or null if none could be found
-     */
-    @Nullable
-    private static StateValue getNewStateValue(State state, Transform transform, Vector oldDirection) {
-        Vector newDirection = new Vector(transform.apply(oldDirection)).subtract(transform.apply(Vector.ZERO)).normalize();
-        StateValue newValue = null;
-        double closest = -2;
-        boolean found = false;
-
-        for (Map.Entry<String, ? extends StateValue> entry : state.valueMap().entrySet()) {
-            StateValue v = entry.getValue();
-            if (v.getDirection() != null) {
-                double dot = v.getDirection().normalize().dot(newDirection);
-                if (dot >= closest) {
-                    closest = dot;
-                    newValue = v;
-                    found = true;
-                }
-            }
-        }
-
-        if (found) {
-            return newValue;
-        } else {
-            return null;
-        }
-    }
-
-    public static Class<?> inject() {
-        return BlockTransformExtent.class;
     }
 }

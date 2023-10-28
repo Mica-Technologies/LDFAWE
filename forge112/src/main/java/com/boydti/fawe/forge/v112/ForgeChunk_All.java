@@ -10,15 +10,6 @@ import com.sk89q.jnbt.CompoundTag;
 import com.sk89q.jnbt.ListTag;
 import com.sk89q.jnbt.StringTag;
 import com.sk89q.jnbt.Tag;
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.entity.Entity;
@@ -37,11 +28,13 @@ import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IBlockStatePalette;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
 
+import java.lang.reflect.Field;
+import java.util.*;
+
 public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
 
-    public BlockStateContainer[] sectionPalettes;
-
     public static Map<String, ResourceLocation> entityKeys;
+    public BlockStateContainer[] sectionPalettes;
 
     /**
      * A FaweSections object represents a chunk and the blocks that you wish to change in it.
@@ -142,7 +135,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                 for (int y = 0; y < 16; y++) {
                     for (int z = 0; z < 16; z++) {
                         for (int x = 0; x < 16; x++) {
-                            char combinedId = blocks[FaweCache.CACHE_J[y][z][x]];
+                            char combinedId = blocks[FaweCache.getJ(y, z, x)];
                             if (combinedId > 1) {
                                 palette.set(x, y, z, Block.getBlockById(combinedId >> 4).getStateFromMeta(combinedId & 0xF));
                             }
@@ -194,7 +187,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                         int z = (MathMan.roundInt(entity.posZ) & 15);
                         int y = MathMan.roundInt(entity.posY);
                         if (y < 0 || y > 255) continue;
-                        if (array[FaweCache.CACHE_J[y][z][x]] != 0) {
+                        if (array[FaweCache.getJ(y, z, x)] != 0) {
                             nmsWorld.removeEntity(entity);
                         }
                     }
@@ -241,7 +234,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                 if (entityKey != null) {
                     Entity entity = EntityList.createEntityByIDFromName(entityKey, nmsWorld);
                     if (entity != null) {
-                        NBTTagCompound tag = (NBTTagCompound)ForgeQueue_All.methodFromNative.invoke(null, nativeTag);
+                        NBTTagCompound tag = (NBTTagCompound) ForgeQueue_All.methodFromNative.invoke(null, nativeTag);
                         entity.readFromNBT(tag);
                         tag.removeTag("UUIDMost");
                         tag.removeTag("UUIDLeast");
@@ -266,12 +259,12 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     int lx = pos.getX() & 15;
                     int ly = pos.getY();
                     int lz = pos.getZ() & 15;
-                    int j = FaweCache.CACHE_I[ly][lz][lx];
+                    int j = FaweCache.getI(ly, lz, lx);
                     char[] array = this.getIdArray(j);
                     if (array == null) {
                         continue;
                     }
-                    int k = FaweCache.CACHE_J[ly][lz][lx];
+                    int k = FaweCache.getJ(ly, lz, lx);
                     if (array[k] != 0) {
                         synchronized (ForgeChunk_All.class) {
                             iterator.remove();
@@ -322,7 +315,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                 for (int y = 0; y < 16; y++) {
                     for (int z = 0; z < 16; z++) {
                         for (int x = 0; x < 16; x++) {
-                            char combinedId = array[FaweCache.CACHE_J[y][z][x]];
+                            char combinedId = array[FaweCache.getJ(y, z, x)];
                             switch (combinedId) {
                                 case 0:
                                     continue;
@@ -355,7 +348,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
             // Set biomes
             if (this.biomes != null) {
                 byte[] currentBiomes = nmsChunk.getBiomeArray();
-                for (int i = 0 ; i < this.biomes.length; i++) {
+                for (int i = 0; i < this.biomes.length; i++) {
                     byte biome = this.biomes[i];
                     if (biome != 0) {
                         if (biome == -1) biome = 0;

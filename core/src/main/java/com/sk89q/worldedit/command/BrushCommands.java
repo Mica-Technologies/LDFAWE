@@ -516,7 +516,7 @@ public class BrushCommands extends BrushProcessor {
             Color color = ColorUtil.parseColor(args.getString(1));
             char[] glassLayers = Fawe.get().getTextureUtil().getNearestLayer(color.getRGB());
             for (char layer : glassLayers) {
-                blocks.add(FaweCache.CACHE_BLOCK[layer]);
+                blocks.add(FaweCache.getBlock(layer));
             }
         } catch (IllegalArgumentException ignore) {
             for (int i = 1; i < args.argsLength(); i++) {

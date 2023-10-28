@@ -37,14 +37,10 @@ import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.schematic.SchematicFormat;
 import com.sk89q.worldedit.util.Countable;
 import com.sk89q.worldedit.world.DataException;
+
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
+import java.util.*;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -67,20 +63,10 @@ import static com.google.common.base.Preconditions.checkNotNull;
 @Deprecated
 public class CuboidClipboard {
 
-    /**
-     * An enum of possible flip directions.
-     */
-    public enum FlipDirection {
-        NORTH_SOUTH,
-        WEST_EAST,
-        UP_DOWN
-    }
-
     public byte[][] ids;
     public byte[][] datas;
     public HashMap<IntegerTrio, CompoundTag> nbtMap;
     public List<CopiedEntity> entities = new ArrayList<>();
-
     public Vector size;
     private int dx;
     private int dxz;
@@ -146,6 +132,25 @@ public class CuboidClipboard {
         nbtMap = new HashMap<>();
     }
 
+    /**
+     * Load a .schematic file into a clipboard.
+     *
+     * @param path the path to the file to load
+     * @return a clipboard
+     * @throws IOException   thrown on I/O error
+     * @throws DataException thrown on error writing the data for other reasons
+     * @deprecated use {@link SchematicFormat#MCEDIT}
+     */
+    @Deprecated
+    public static CuboidClipboard loadSchematic(File path) throws DataException, IOException {
+        checkNotNull(path);
+        return SchematicFormat.MCEDIT.load(path);
+    }
+
+    public static Class<?> inject() {
+        return CuboidClipboard.class;
+    }
+
     public BaseBlock getBlock(Vector position) {
         return getBlock(position.getBlockX(), position.getBlockY(), position.getBlockZ());
     }
@@ -154,19 +159,19 @@ public class CuboidClipboard {
         int i = x + z * dx + (y >> 4) * dxz;
         byte[] idArray = ids[i];
         if (idArray == null) {
-            return FaweCache.CACHE_BLOCK[0];
+            return FaweCache.getBlock(0);
         }
         int y2 = y & 0xF;
         int id = idArray[y2] & 0xFF;
         BaseBlock block;
         if (!FaweCache.hasData(id) || datas == null) {
-            block = FaweCache.CACHE_BLOCK[id << 4];
+            block = FaweCache.getBlock(id << 4);
         } else {
             byte[] dataArray = datas[i];
             if (dataArray == null) {
-                block = FaweCache.CACHE_BLOCK[id << 4];
+                block = FaweCache.getBlock(id << 4);
             } else {
-                block = FaweCache.CACHE_BLOCK[(id << 4) + dataArray[y2]];
+                block = FaweCache.getBlock((id << 4) + dataArray[y2]);
             }
         }
         if (FaweCache.hasNBT(id)) {
@@ -440,7 +445,7 @@ public class CuboidClipboard {
 
         CuboidClipboard cloned = new CuboidClipboard(sizeRotated.positive().round());
 
-        BaseBlock air = FaweCache.CACHE_BLOCK[0];
+        BaseBlock air = FaweCache.getBlock(0);
 
         for (int x = 0; x < width; ++x) {
             for (int z = 0; z < length; ++z) {
@@ -782,21 +787,6 @@ public class CuboidClipboard {
     }
 
     /**
-     * Load a .schematic file into a clipboard.
-     *
-     * @param path the path to the file to load
-     * @return a clipboard
-     * @throws IOException   thrown on I/O error
-     * @throws DataException thrown on error writing the data for other reasons
-     * @deprecated use {@link SchematicFormat#MCEDIT}
-     */
-    @Deprecated
-    public static CuboidClipboard loadSchematic(File path) throws DataException, IOException {
-        checkNotNull(path);
-        return SchematicFormat.MCEDIT.load(path);
-    }
-
-    /**
      * Get the origin point, which corresponds to where the copy was
      * originally copied from. The origin is the lowest possible X, Y, and
      * Z components of the cuboid region that was copied.
@@ -926,6 +916,15 @@ public class CuboidClipboard {
     }
 
     /**
+     * An enum of possible flip directions.
+     */
+    public enum FlipDirection {
+        NORTH_SOUTH,
+        WEST_EAST,
+        UP_DOWN
+    }
+
+    /**
      * Stores a copied entity.
      */
     private class CopiedEntity {
@@ -936,9 +935,5 @@ public class CuboidClipboard {
             this.entity = entity;
             this.relativePosition = entity.getPosition().getPosition().subtract(getOrigin());
         }
-    }
-
-    public static Class<?> inject() {
-        return CuboidClipboard.class;
     }
 }
