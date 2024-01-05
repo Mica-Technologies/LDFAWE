@@ -69,6 +69,8 @@ ext {
         buildNumber = "-${index}"
         semver = "-${major}.${minor}.${patch}"
     } catch (Throwable ignore) {
+        println "Error: ${ignore.message}"
+        ignore.printStackTrace()
         revision = "unknown";
     }
 }
