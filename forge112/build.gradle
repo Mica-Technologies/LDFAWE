@@ -1,60 +1,125 @@
 buildscript {
     repositories {
-        jcenter()
-        maven {
-            name = "forge"
-            url = "https://files.minecraftforge.net/maven"
-        }
-        maven {url = "https://oss.sonatype.org/content/repositories/snapshots/"}
+        mavenCentral()
+        maven { url = "https://maven.minecraftforge.net/" }
+        gradlePluginPortal()
     }
+
     dependencies {
-        classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
+        classpath group: 'net.minecraftforge.gradle', name: 'ForgeGradle', version: '[6.0,6.2)', changing: true
     }
 }
 
-apply plugin: 'net.minecraftforge.gradle.forge'
-apply plugin: 'com.github.johnrengelman.shadow'
-
-clean { delete "../target" }
-
-dependencies {
-    compile project(':core')
-    compile 'org.spongepowered:spongeapi:6.0.0-SNAPSHOT'
-    compile 'com.sk89q.worldedit:worldedit-forge-mc1.8.9:6.1.1'
+plugins {
+    id 'com.github.johnrengelman.shadow'
+    id 'java'
 }
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+apply plugin: "net.minecraftforge.gradle"
 
 repositories {
     maven {
-        name = 'forge'
-        url = 'https://files.minecraftforge.net/maven'
+        url = "https://maven.minecraftforge.net/"
     }
-    maven {
-        name = "Sponge"
-        url = "https://repo.spongepowered.org/maven"
-    }
-//    maven {
-//        name = "Sponge Metrics"
-//        url = "https://repo.mcstats.org/content/repositories/releases/"
-//    }
-}
-minecraft {
-    version = "1.12.2-14.23.0.2532"
-    mappings = "snapshot_20171108"
-    runDir = 'run'
 }
 
-project.archivesBaseName = "${project.archivesBaseName}-mc${minecraft.version}"
+configurations {
+    compile.extendsFrom(shade)
+}
+
+dependencies {
+    // Specify the version of Minecraft to use, If this is any group other then 'net.minecraft' it is assumed
+    // that the dep is a ForgeGradle 'patcher' dependency. And it's patches will be applied.
+    // The userdev artifact is a special name and will get all sorts of transformations applied to it.
+    minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2860'
+
+    // You may put jars on which you depend on in ./libs or you may define them like so..
+    // compile "some.group:artifact:version:classifier"
+    // compile "some.group:artifact:version"
+    implementation fg.deobf(  project(':core'))
+    implementation fg.deobf(  'org.spongepowered:spongeapi:6.0.0-SNAPSHOT')
+    implementation fg.deobf(  'com.sk89q.worldedit:worldedit-forge-mc1.8.9:6.1.1')
+
+    implementation fg.deobf( 'org.yaml:snakeyaml:1.16')
+    implementation fg.deobf( 'com.google.code.gson:gson:2.2.4')
+    implementation fg.deobf( 'net.fabiozumbi12:redprotect:1.9.6')
+    implementation fg.deobf( 'com.plotsquared:plotsquared-api:latest')
+    implementation fg.deobf( 'org.primesoft:BlocksHub:2.0')
+    implementation fg.deobf( 'com.github.luben:zstd-jni:1.1.1')
+//    implementation 'org.javassist:javassist:3.22.0-CR1'
+    implementation fg.deobf( 'co.aikar:fastutil-lite:1.0')
+    minecraftLibrary(group: 'com.sk89q.worldedit', name: 'worldedit-core', version:'6.1.3-SNAPSHOT') {
+        exclude(module: 'bukkit-classloader-check')
+    }
+    implementation fg.deobf( 'com.github.Mica-Technologies.micautils_j8:micautils:1.0.0')
+
+    // Real examples
+    // compile 'com.mod-buildcraft:buildcraft:6.0.8:dev'  // adds buildcraft to the dev env
+    // compile 'com.googlecode.efficient-java-matrix-library:ejml:0.24' // adds ejml to the dev env
+
+    // The 'provided' configuration is for optional dependencies that exist at compile-time but might not at runtime.
+    // provided 'com.mod-buildcraft:buildcraft:6.0.8:dev'
+
+    // These dependencies get remapped to your current MCP mappings
+    // deobf 'com.mod-buildcraft:buildcraft:6.0.8:dev'
+
+    // For more info...
+    // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
+    // http://www.gradle.org/docs/current/userguide/dependency_management.html
+
+}
+
+minecraft {
+    // The mappings can be changed at any time, and must be in the following format.
+    // snapshot_YYYYMMDD   Snapshot are built nightly.
+    // stable_#            Stables are built at the discretion of the MCP team.
+    // Use non-default mappings at your own risk. they may not always work.
+    // Simply re-run your setup task after changing the mappings to update your workspace.
+    //mappings channel: 'snapshot', version: '20171003-1.12'
+    mappings channel: 'snapshot', version: '20171108-1.12'
+    // makeObfSourceJar = false // an Srg named sources jar is made by default. uncomment this to disable.
+
+    // accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+
+    // Default run configurations.
+    // These can be tweaked, removed, or duplicated as needed.
+    runs {
+        "client" {
+            workingDirectory file("./run")
+            mods { "${project.name}" { source sourceSets.main } }
+        }
+
+        "server" {
+            workingDirectory file("./run/server")
+            mods { "${project.name}" { source sourceSets.main } }
+        }
+    }
+}
+
+clean { delete "../target" }
 
 processResources {
+    //this will ensure that this task is redone when the versions change.
+    inputs.property "version", project.version
+    inputs.property "mcversion", "1.12.2-14.23.5.2860"
+
+    //replace stuff in mcmod.info, nothing else
     from(sourceSets.main.resources.srcDirs) {
-        expand 'version': project.version,
-                'mcVersion': project.minecraft.version
-        exclude 'mcmod.info'
+        include "mcmod.info"
+
+        //replace version and mcversion
+        expand "version":project.version, "mcversion":"1.12.2-14.23.5.2860"
     }
+
+    //copy everything else, that"s not the mcmod.info
+    from(sourceSets.main.resources.srcDirs) {
+        exclude "mcmod.info"
+    }
+
+    rename '(.+_at.cfg)', 'META-INF/$1'
 }
+
+sourceSets.all { it.output.resourcesDir = it.output.classesDirs.getFiles().iterator().next() }
 
 shadowJar {
     relocate 'org.yaml.snakeyaml', 'com.boydti.fawe.yaml'
@@ -64,13 +129,15 @@ shadowJar {
         include(dependency('co.aikar:fastutil-lite:1.0'))
         include(dependency(':core'))
         include(dependency('org.yaml:snakeyaml:1.16'))
-        include(dependency('com.github.Mica-Technologies.micautils_j8:micautils:0.0.2'))
+        include(dependency('com.github.Mica-Technologies.micautils_j8:micautils:1.0.0'))
     }
-    archiveName = "${parent.name}-${project.name}-${parent.version}.jar"
-    destinationDir = file '../target'
+    archiveFileName = "${parent.name}-${project.name}-${parent.version}.jar"
+    destinationDirectory = file '../target'
     manifest {
         attributes("Main-Class": "com.boydti.fawe.installer.InstallerFrame")
     }
+    configurations = [project.configurations.shade]
+    duplicatesStrategy DuplicatesStrategy.EXCLUDE //prevent duplicates
 }
 shadowJar.doLast {
     task ->
@@ -78,19 +145,10 @@ shadowJar.doLast {
 }
 
 
-reobf {
-    shadowJar {
-        mappingType = 'SEARGE'
-    }
-}
-
-task deobfJar(type: Jar) {
-    from sourceSets.main.output
-    classifier = 'dev'
-}
+jar.finalizedBy('reobfJar')
+tasks.build.dependsOn shadowJar
 
 artifacts {
-    archives deobfJar
+    archives shadowJar
+    archives jar
 }
-
-build.dependsOn(shadowJar)

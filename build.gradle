@@ -2,10 +2,10 @@ buildscript {
     repositories {
         mavenCentral()
         maven { url = "https://oss.sonatype.org/content/repositories/snapshots/" }
-        jcenter()
+        gradlePluginPortal()
     }
     dependencies {
-        classpath 'com.github.jengelman.gradle.plugins:shadow:1.2.3'
+        classpath 'com.github.johnrengelman:shadow:8.1.1'
         classpath 'org.ajoberstar:grgit:1.7.0'
     }
     configurations.all {
@@ -77,17 +77,20 @@ version = date + revision + buildNumber + semver
 if (project.hasProperty("lzNoVersion")) { // gradle build -PlzNoVersion
     version = "unknown"
 }
-description = """LDFAWE"""
+description = """FastAsyncWorldEdit"""
 
 subprojects {
 
     apply plugin: 'java'
-    apply plugin: 'maven'
+    apply plugin: 'maven-publish'
     apply plugin: 'eclipse'
     apply plugin: 'idea'
 
-    sourceCompatibility = 1.8
-    targetCompatibility = 1.8
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(8)
+        }
+    }
 
     compileJava {
         options.compilerArgs += ["-parameters"]
