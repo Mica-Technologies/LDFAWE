@@ -45,13 +45,13 @@ jobs:
           echo "PRE_TAG=$preReleaseVersion" >> $GITHUB_ENV
 
       - name: Create Release Tag
-        if: ${{ github.event.inputs.release }} == 'true'
+        if: ${{ github.event.inputs.release == 'true' && github.event.inputs.release }}
         run: |
           git tag "${{ env.REL_TAG }}" "${{ github.sha }}"
           git push origin "${{ env.REL_TAG }}"
 
       - name: Create Pre-Release Tag
-        if: ${{ github.event.inputs.release }} == 'false'
+        if: ${{ github.event.inputs.release == 'false' || !github.event.inputs.release }}
         run: |
           git tag "${{ env.PRE_TAG }}" "${{ github.sha }}"
           git push origin "${{ env.PRE_TAG }}"
@@ -87,7 +87,7 @@ jobs:
           echo "::set-output name=crc32::$crc32"
 
       - name: Create Release Entry
-        if: ${{ github.event.inputs.release }} == 'true'
+        if: ${{ github.event.inputs.release == 'true' && github.event.inputs.release }}
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -110,7 +110,7 @@ jobs:
             ${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar
 
       - name: Create Pre-Release Entry
-        if: ${{ github.event.inputs.release }} == 'false'
+        if: ${{ github.event.inputs.release == 'false' || !github.event.inputs.release }}
         uses: softprops/action-gh-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
