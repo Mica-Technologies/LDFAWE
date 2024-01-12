@@ -81,10 +81,10 @@ jobs:
           md5=$(md5sum ./${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar | awk '{print $1}')
           sha256=$(sha256sum ./${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar | awk '{print $1}')
           crc32=$(cksum ./${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar | awk '{print $1}')
-          echo "::set-output name=sha1::$sha1"
-          echo "::set-output name=md5::$md5"
-          echo "::set-output name=sha256::$sha256"
-          echo "::set-output name=crc32::$crc32"
+          echo "SHA1_HASH=$sha1" >> $GITHUB_ENV
+          echo "MD5_HASH=$md5" >> $GITHUB_ENV
+          echo "SHA256_HASH=$sha256" >> $GITHUB_ENV
+          echo "CRC32_HASH=$crc32" >> $GITHUB_ENV
 
       - name: Create Release Entry
         if: ${{ github.event.inputs.release == 'true' && github.event.inputs.release }}
@@ -99,10 +99,10 @@ jobs:
             Mod Version: ${{ env.MOD_VERSION }}
             Game Version: ${{ env.MINECRAFT_VERSION }}
 
-            SHA-1: `${{ steps.calculate-hashes.outputs.sha1 }}`
-            SHA-256: `${{ steps.calculate-hashes.outputs.sha256 }}`
-            MD5: `${{ steps.calculate-hashes.outputs.md5 }}`
-            CRC-32: `${{ steps.calculate-hashes.outputs.crc32 }}`
+            SHA-1: `${{ env.SHA1_HASH }}`
+            SHA-256: `${{ env.SHA256_HASH }}`
+            MD5: `${{ env.MD5_HASH }}`
+            CRC-32: `${{ env.CRC32_HASH }}`
           draft: false
           prerelease: true
           generate_release_notes: true
@@ -122,10 +122,10 @@ jobs:
             Mod Version: ${{ env.MOD_VERSION }}
             Game Version: ${{ env.MINECRAFT_VERSION }}
 
-            SHA-1: `${{ steps.calculate-hashes.outputs.sha1 }}`
-            SHA-256: `${{ steps.calculate-hashes.outputs.sha256 }}`
-            MD5: `${{ steps.calculate-hashes.outputs.md5 }}`
-            CRC-32: `${{ steps.calculate-hashes.outputs.crc32 }}`
+            SHA-1: `${{ env.SHA1_HASH }}`
+            SHA-256: `${{ env.SHA256_HASH }}`
+            MD5: `${{ env.MD5_HASH }}`
+            CRC-32: `${{ env.CRC32_HASH }}`
             
             NOTICE: This is a pre-release version of the mod and is not 
             guaranteed to be stable or permanently available for download/usage.
