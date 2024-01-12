@@ -4,44 +4,38 @@
 
 ---
 
-# This is the legacy version of FAWE (1.8 - 1.12 and other platforms). It is no longer maintained. The focus lays on the newer versions of minecraft. You can find the new version of FAWE [here](https://github.com/IntellectualSites/FastAsyncWorldEdit).
+# LDFAWE (Limitless Development Fast Async World Edit)
 
-FAWE is a fork of WorldEdit that has huge speed and memory improvements and considerably more features
+LDFAWE is a fork of the legacy [FAWE](https://github.com/boy0001/FastAsyncWorldedit) mod which aims to improve upon
+WorldEdit with new features and large performance improvements.
 
-It is available for Bukkit, Forge, Sponge and Nukkit.
+Unlike the legacy [FAWE](https://github.com/boy0001/FastAsyncWorldedit) mod which supported versions 1.8 - 1.12 for
+Bukkit, Forge, Sponge, and Nukkit, development of LDFAWE is focused primarily on Forge 1.12.
 
-## Links 
+## Documentation
 
-* [Spigot Page](https://www.spigotmc.org/threads/fast-async-worldedit.100104/)
-* [Discord](https://discord.gg/ngZCzbU)
-* [Wiki](https://github.com/boy0001/FastAsyncWorldedit/wiki)
+Documentation for LDFAWE is currently available via the legacy [FAWE](https://github.com/boy0001/FastAsyncWorldedit)
+mod's wiki: https://github.com/boy0001/FastAsyncWorldedit/wiki
 
-## Downloads
-### <1.12.2
-* [Download](https://empcraft.com/fawe/download/?bukkit)
-* [Jenkins](https://ci.athion.net/job/FastAsyncWorldEdit/)
-* [JavaDoc](https://ci.athion.net/job/FastAsyncWorldEdit/javadoc/)
+* A standalone, dedicated Wiki for the LDFAWE mod is planned. If and when the feature set or commands diverge from the
+  upstream version, the Wiki will be created to ensure accurate, up-to-date documentation.
 
-### 1.13+
-* [Download](https://empcraft.com/fawe/download/?bukkit113)
-* [Jenkins](https://ci.athion.net/job/FastAsyncWorldEdit-1.13/)
-* [JavaDoc](https://ci.athion.net/job/FastAsyncWorldEdit-1.13/javadoc/)
-* [Repository](https://github.com/IntellectualSites/FastAsyncWorldEdit-1.13)
+## Official FAWE Mod
 
-## Developer Resources
-* [Maven Repo](http://ci.athion.net/job/FastAsyncWorldEdit/ws/mvn/)
-* [API Documentation](https://github.com/boy0001/FastAsyncWorldedit/wiki/API)
+Information about official versions of the FAWE mod can be found
+at https://intellectualsites.gitbook.io/fastasyncworldedit/.
 
-## Building
-FAWE uses gradle to build
-
-```
-$ gradlew setupDecompWorkspace
-$ gradlew build
-```
+Legacy versions of the official FAWE mod which support Forge 1.12 are no longer supported.
 
 ## Contributing
-Have an idea for an optimization, or a cool feature?
- - I'll accept most PR's
- - Let me know what you've tested / what may need further testing
- - If you need any help, create a ticket or discuss on [Discord](https://discord.gg/ngZCzbU)
+
+Looking to contribute? Let us know!
+
+- Pull requests (PRs) are welcome
+- Let us know what has or has not been tested
+- GitHub issues are available for additional assistance
+
+## Disclaimer
+
+LDFAWE is not affiliated with the original, official FAWE mod, Forge, or Minecraft. LDFAWE has been developed to improve
+upon and extend support for Forge 1.12. Other game versions will not be supported by LDFAWE.
