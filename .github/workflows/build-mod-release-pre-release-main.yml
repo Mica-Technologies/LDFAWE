@@ -1,0 +1,138 @@
+name: Build Mod Release/Pre-Release (Main Branch)
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Create a full release'
+        required: false
+        default: 'false'
+
+jobs:
+  assemble_release:
+    name: Build Mod and Publish Release/Pre-Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set Up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'corretto'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/gradle-build-action@v2
+
+      - name: Create Version Numbers
+        run: |
+          calculatedSha=$(git rev-parse --short ${{ github.sha }})
+          echo "COMMIT_SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
+
+          # Calculate 'final' version number (YYYY.MM.DD)
+          relVersion=$(date -u +'%Y.%m.%d')
+          echo "REL_TAG=$relVersion" >> $GITHUB_ENV
+
+          # Calculate 'pre-release' version number (YYYY.MM.DD-pre.hhmm.shorttz+COMMITSHORTSHA)
+          preReleaseVersion=$(date -u +'%Y.%m.%d-pre.%H%M.%Z%z')"+$calculatedSha"
+          echo "PRE_TAG=$preReleaseVersion" >> $GITHUB_ENV
+
+      - name: Create Release Tag
+        if: ${{ github.event.inputs.release }} == 'true'
+        run: |
+          git tag "${{ env.REL_TAG }}" "${{ github.sha }}"
+          git push origin "${{ env.REL_TAG }}"
+
+      - name: Create Pre-Release Tag
+        if: ${{ github.event.inputs.release }} == 'false'
+        run: |
+          git tag "${{ env.PRE_TAG }}" "${{ github.sha }}"
+          git push origin "${{ env.PRE_TAG }}"
+
+      - name: Assemble Mod with Gradle
+        run: ./gradlew build -Dhttp.socketTimeout=60000 -Dhttp.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000 -Dorg.gradle.internal.http.connectionTimeout=60000
+
+      - name: Save Mod Name to GITHUB_ENV
+        run: echo "MOD_NAME=$(${{github.workspace}}/gradlew -q printModName)" >> $GITHUB_ENV
+
+      - name: Save Mod Version to GITHUB_ENV
+        run: echo "MOD_VERSION=$(${{github.workspace}}/gradlew -q printModVersion)" >> $GITHUB_ENV
+
+      - name: Save Mod Archive Base Name to GITHUB_ENV
+        run: echo "MOD_ARCHIVE_BASE_NAME=$(${{github.workspace}}/gradlew -q printArchivesBaseName)" >> $GITHUB_ENV
+
+      - name: Save Minecraft Version to GITHUB_ENV
+        run: echo "MINECRAFT_VERSION=$(${{github.workspace}}/gradlew -q printMinecraftVersion)" >> $GITHUB_ENV
+
+      - name: Copy Assembled Mod Jar to GitHub Actions Workspace
+        run: cp ./build/libs/${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar ./
+
+      - name: Calculate Hashes for the Jar
+        id: calculate-hashes
+        run: |
+          sha1=$(sha1sum ./${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar | awk '{print $1}')
+          md5=$(md5sum ./${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar | awk '{print $1}')
+          sha256=$(sha256sum ./${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar | awk '{print $1}')
+          crc32=$(cksum ./${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar | awk '{print $1}')
+          echo "::set-output name=sha1::$sha1"
+          echo "::set-output name=md5::$md5"
+          echo "::set-output name=sha256::$sha256"
+          echo "::set-output name=crc32::$crc32"
+
+      - name: Create Release Entry
+        if: ${{ github.event.inputs.release }} == 'true'
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.REL_TAG }}
+          name: Release ${{ env.MOD_VERSION }} (${{ env.MINECRAFT_VERSION }})
+          body: |
+            Release of ${{ env.MOD_NAME }}
+            Mod Version: ${{ env.MOD_VERSION }}
+            Game Version: ${{ env.MINECRAFT_VERSION }}
+
+            SHA-1: `${{ steps.calculate-hashes.outputs.sha1 }}`
+            SHA-256: `${{ steps.calculate-hashes.outputs.sha256 }}`
+            MD5: `${{ steps.calculate-hashes.outputs.md5 }}`
+            CRC-32: `${{ steps.calculate-hashes.outputs.crc32 }}`
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+          files: |
+            ${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar
+
+      - name: Create Pre-Release Entry
+        if: ${{ github.event.inputs.release }} == 'false'
+        uses: softprops/action-gh-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ env.PRE_TAG }}
+          name: Pre-Release ${{ env.MOD_VERSION }} (${{ env.MINECRAFT_VERSION }})
+          body: |
+            Pre-Release of ${{ env.MOD_NAME }}
+            Mod Version: ${{ env.MOD_VERSION }}
+            Game Version: ${{ env.MINECRAFT_VERSION }}
+
+            SHA-1: `${{ steps.calculate-hashes.outputs.sha1 }}`
+            SHA-256: `${{ steps.calculate-hashes.outputs.sha256 }}`
+            MD5: `${{ steps.calculate-hashes.outputs.md5 }}`
+            CRC-32: `${{ steps.calculate-hashes.outputs.crc32 }}`
+            
+            NOTICE: This is a pre-release version of the mod and is not 
+            guaranteed to be stable or permanently available for download/usage.
+            Pre-release versions of ${{ env.MOD_NAME }} may be removed or unavailable after
+            90 days from their initial release.
+          draft: false
+          prerelease: true
+          generate_release_notes: true
+          files: |
+            ${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar
