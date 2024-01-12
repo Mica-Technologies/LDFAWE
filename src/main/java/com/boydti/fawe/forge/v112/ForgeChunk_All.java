@@ -68,12 +68,9 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
         if (sectionPalettes != null) {
             copy.sectionPalettes = new BlockStateContainer[16];
             try {
-                Field fieldBits = BlockStateContainer.class.getDeclaredField("field_186021_b"); // storage
-                fieldBits.setAccessible(true);
-                Field fieldPalette = BlockStateContainer.class.getDeclaredField("field_186022_c"); // palettes
-                fieldPalette.setAccessible(true);
-                Field fieldSize = BlockStateContainer.class.getDeclaredField("field_186024_e"); // bits
-                fieldSize.setAccessible(true);
+                Field fieldBits = BlockStateContainer.class.getDeclaredField("storage"); // field_186021_b
+                Field fieldPalette = BlockStateContainer.class.getDeclaredField("palette"); // field_186022_c
+                Field fieldSize = BlockStateContainer.class.getDeclaredField("bits"); // field_186024_e
                 for (int i = 0; i < sectionPalettes.length; i++) {
                     BlockStateContainer current = sectionPalettes[i];
                     if (current == null) {
@@ -227,7 +224,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     for (ResourceLocation key : EntityList.getEntityNameList()) {
                         String currentId = EntityList.getTranslationName(key);
                         entityKeys.put(currentId, key);
-                        entityKeys.put(key.getResourcePath(), key);
+                        entityKeys.put(key.getPath(), key);
                     }
                 }
                 ResourceLocation entityKey = entityKeys.get(id);
