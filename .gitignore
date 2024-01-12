@@ -1,45 +1,83 @@
-*.bat
-*.prefs
-*.class
-/target/classes
-/target/PlotSquared-Null.jar
-/target/PlotSquared-Uber.jar
-/target/maven-archiver
-*.project
-*.classpath
-/target/
-/.gradle
-/.idea
-*.log
-gradle.log
-/lib
-/core/lib
-/bukkit/lib
-/core/build
-/forge189/build
-/forge1710/build
-/sponge/build
-/sponge111/build
-/bukkit/out
-/nukkit/out
-/sponge112/build
-/core/out
-/bukkit/build
-/bukkit0/build
-/bukkit19/build
-/bukkit18/build
-build
-/mvn
-spigot-1.10
-wiki_permissions.md
-/textures
-*.iml
-/obj
-docs/
+.nopublish
 
-bukkit/bin/
-core/bin/
-favs/bin/
-forge110/bin/
-forge189/bin/
-forge194/bin/
+### Windows ###
+
+thumbs.db
+*.db
+
+### Java ###
+
+*.class
+
+# Mobile Tools for Java (J2ME)
+.mtj.tmp/
+
+# Package Files #
+*.war
+*.ear
+*.txt
+
+# virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
+hs_err_pid*
+
+### Eclipse ###
+
+*.pydevproject
+.metadata
+.gradle
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.settings/
+.loadpath
+/eclipse
+
+# Eclipse Core
+.project
+
+# External tool builders
+.externalToolBuilders/
+
+# Locally stored "Eclipse launch configurations"
+*.launch
+
+# CDT-specific
+.cproject
+
+# JDT-specific (Eclipse Java Development Tools)
+.classpath
+
+# Java annotation processor (APT)
+.factorypath
+
+# PDT-specific
+.buildpath
+
+# sbteclipse plugin
+.target
+
+# TeXlipse plugin
+.texlipse
+
+### Intellij IDEA ###
+
+*.iml
+*.ipr
+*.iws
+
+.idea/
+.idea_modules/
+/classes/
+/out/
+/build/
+
+# Linux
+*~
+
+run/
+
+logs/

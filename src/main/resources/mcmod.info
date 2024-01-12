@@ -1,0 +1,12 @@
+[{
+    "modid": "${modid}",
+    "name": "${modname}",
+    "description": "LDFAWE (Limitless Development FAWE) for Forge 1.12",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "logoFile": "",
+    "url": "https://github.com/Mica-Technologies/LDFAWE",
+    "authorList": [],
+    "credits": "",
+    "dependencies": []
+}]

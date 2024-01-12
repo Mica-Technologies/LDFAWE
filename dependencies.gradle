@@ -1,0 +1,37 @@
+//file:noinspection DependencyNotationArgument
+// TODO remove when fixed in RFG ^
+/*
+ * Add your dependencies here. Common configurations:
+ *  - implementation("group:name:version:classifier"): if you need this for internal implementation details of the mod.
+ *       Available at compiletime and runtime for your environment.
+ *
+ *  - compileOnlyApi("g:n:v:c"): if you need this for internal implementation details of the mod.
+ *       Available at compiletime but not runtime for your environment.
+ *
+ *  - annotationProcessor("g:n:v:c"): mostly for java compiler plugins, if you know you need this, use it, otherwise don't worry
+ *
+ *  - testCONFIG("g:n:v:c"): replace CONFIG by one of the above, same as above but for the test sources instead of main
+ *
+ * You can exclude transitive dependencies (dependencies of the chosen dependency) by appending { transitive = false } if needed.
+ *
+ * To add a mod with CurseMaven, replace '("g:n:v:c")' in the above with 'rfg.deobf("curse.maven:project_slug-project_id:file_id")'
+ * Example: implementation rfg.deobf("curse.maven:gregtech-ce-unofficial-557242:4527757")
+ *
+ * To shadow a dependency, use 'shadowImplementation'. For more info, see https://github.com/GregTechCEu/Buildscripts/blob/master/docs/shadow.md
+ *
+ * For more details, see https://docs.gradle.org/8.0.1/userguide/java_library_plugin.html#sec:java_library_configurations_graph
+ */
+dependencies {
+    compileOnlyApi 'org.spongepowered:spongeapi:6.0.0-SNAPSHOT'
+    compileOnlyApi 'com.sk89q.worldedit:worldedit-forge-mc1.8.9:6.1.1'
+    shadowImplementation 'org.yaml:snakeyaml:1.16'
+    implementation 'com.google.code.gson:gson:2.2.4'
+    compileOnlyApi 'net.fabiozumbi12:redprotect:1.9.6'
+    compileOnlyApi 'com.plotsquared:plotsquared-api:latest'
+    compileOnlyApi 'org.primesoft:BlocksHub:2.0'
+    shadowImplementation 'com.github.luben:zstd-jni:1.1.1'
+    shadowImplementation 'co.aikar:fastutil-lite:1.0'
+    implementation(group: 'com.sk89q.worldedit', name: 'worldedit-core', version:'6.1.3-SNAPSHOT') {
+        exclude(module: 'bukkit-classloader-check')
+    }
+}
