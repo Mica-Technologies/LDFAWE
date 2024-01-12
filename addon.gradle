@@ -1,0 +1,20 @@
+// Add any additional Gradle tasks
+
+// ADD MAIN CLASS TO MANIFEST
+shadowJar {
+    manifest {
+        attributes("Main-Class": "com.boydti.fawe.installer.InstallerFrame")
+    }
+}
+
+// OUTPUT VERSIONING INFO
+processResources {
+    inputs.property 'version', project.version
+    inputs.property 'name', project.name
+    filesMatching('fawe.properties') { fcd ->
+        fcd.expand(
+                'version': project.version,
+                'name': project.name
+        )
+    }
+}
