@@ -84,28 +84,17 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
             Class<?> converter = Class.forName("com.sk89q.worldedit.forge.NBTConverter");
             methodFromNative = converter.getDeclaredMethod("toNative", Tag.class);
             methodToNative = converter.getDeclaredMethod("fromNative", NBTBase.class);
-            methodFromNative.setAccessible(true);
-            methodToNative.setAccessible(true);
 
-            fieldBiomes = ChunkGeneratorOverworld.class.getDeclaredField("field_185981_C"); // biomesForGeneration
-            fieldBiomes.setAccessible(true);
-            fieldChunkGenerator = ChunkProviderServer.class.getDeclaredField("field_186029_c"); // chunkGenerator
-            fieldChunkGenerator.setAccessible(true);
-            fieldSeed = WorldInfo.class.getDeclaredField("field_76100_a"); // randomSeed
-            fieldSeed.setAccessible(true);
-            fieldBiomeCache = BiomeProvider.class.getDeclaredField("field_76942_f"); // biomeCache
-            fieldBiomeCache.setAccessible(true);
-            fieldBiomes2 = BiomeProvider.class.getDeclaredField("field_76943_g"); // biomesToSpawnIn
-            fieldBiomes2.setAccessible(true);
-            fieldGenLayer1 = BiomeProvider.class.getDeclaredField("field_76944_d"); // genBiomes
-            fieldGenLayer2 = BiomeProvider.class.getDeclaredField("field_76945_e"); // biomeIndexLayer
-            fieldGenLayer1.setAccessible(true);
-            fieldGenLayer2.setAccessible(true);
+            fieldBiomes = ChunkGeneratorOverworld.class.getDeclaredField("biomesForGeneration"); // field_185981_C
+            fieldChunkGenerator = ChunkProviderServer.class.getDeclaredField("chunkGenerator"); // field_186029_c
+            fieldSeed = WorldInfo.class.getDeclaredField("randomSeed"); // field_76100_a
+            fieldBiomeCache = BiomeProvider.class.getDeclaredField("biomeCache"); // field_76942_f
+            fieldBiomes2 = BiomeProvider.class.getDeclaredField("biomesToSpawnIn"); // field_76943_g
+            fieldGenLayer1 = BiomeProvider.class.getDeclaredField("genBiomes"); // field_76944_d
+            fieldGenLayer2 = BiomeProvider.class.getDeclaredField("biomeIndexLayer"); // field_76945_e
 
-            fieldTickingBlockCount = ExtendedBlockStorage.class.getDeclaredField("field_76683_c");
-            fieldNonEmptyBlockCount = ExtendedBlockStorage.class.getDeclaredField("field_76682_b");
-            fieldTickingBlockCount.setAccessible(true);
-            fieldNonEmptyBlockCount.setAccessible(true);
+            fieldTickingBlockCount = ExtendedBlockStorage.class.getDeclaredField("tickRefCount"); // field_76683_c
+            fieldNonEmptyBlockCount = ExtendedBlockStorage.class.getDeclaredField("blockRefCount"); // field_76682_b
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
@@ -459,7 +448,7 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
             } catch (Throwable e) {
                 MainUtil.handleError(e);
             }
-            Long2ObjectMap<Chunk> id2ChunkMap = chunkServer.id2ChunkMap;
+            Long2ObjectMap<Chunk> id2ChunkMap = chunkServer.loadedChunks;
             id2ChunkMap.remove(pos);
             mcChunk = gen.generateChunk(x, z);
             id2ChunkMap.put(pos, mcChunk);
