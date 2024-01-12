@@ -104,7 +104,7 @@ jobs:
             MD5: `${{ env.MD5_HASH }}`
             CRC-32: `${{ env.CRC32_HASH }}`
           draft: false
-          prerelease: true
+          prerelease: false
           generate_release_notes: true
           files: |
             ${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar
