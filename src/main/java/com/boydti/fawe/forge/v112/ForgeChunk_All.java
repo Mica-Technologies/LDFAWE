@@ -27,6 +27,7 @@ import net.minecraft.world.chunk.BlockStatePaletteRegistry;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IBlockStatePalette;
 import net.minecraft.world.chunk.storage.ExtendedBlockStorage;
+import net.minecraftforge.fml.common.ObfuscationReflectionHelper;
 
 import java.lang.reflect.Field;
 import java.util.*;
@@ -68,9 +69,9 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
         if (sectionPalettes != null) {
             copy.sectionPalettes = new BlockStateContainer[16];
             try {
-                Field fieldBits = BlockStateContainer.class.getDeclaredField("storage"); // field_186021_b
-                Field fieldPalette = BlockStateContainer.class.getDeclaredField("palette"); // field_186022_c
-                Field fieldSize = BlockStateContainer.class.getDeclaredField("bits"); // field_186024_e
+                Field fieldBits = ObfuscationReflectionHelper.findField(BlockStateContainer.class, "field_186021_b"); // storage
+                Field fieldPalette = ObfuscationReflectionHelper.findField(BlockStateContainer.class, "field_186022_c"); // palette
+                Field fieldSize = ObfuscationReflectionHelper.findField(BlockStateContainer.class,"field_186024_e"); // bits
                 for (int i = 0; i < sectionPalettes.length; i++) {
                     BlockStateContainer current = sectionPalettes[i];
                     if (current == null) {

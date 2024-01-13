@@ -53,6 +53,8 @@ import net.minecraft.world.gen.ChunkProviderServer;
 import net.minecraft.world.gen.IChunkGenerator;
 import net.minecraft.world.storage.WorldInfo;
 import net.minecraftforge.common.DimensionManager;
+import net.minecraftforge.fml.common.ObfuscationReflectionHelper;
+import net.minecraftforge.fml.relauncher.ReflectionHelper;
 
 import java.io.File;
 import java.io.IOException;
@@ -85,16 +87,25 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
             methodFromNative = converter.getDeclaredMethod("toNative", Tag.class);
             methodToNative = converter.getDeclaredMethod("fromNative", NBTBase.class);
 
-            fieldBiomes = ChunkGeneratorOverworld.class.getDeclaredField("biomesForGeneration"); // field_185981_C
-            fieldChunkGenerator = ChunkProviderServer.class.getDeclaredField("chunkGenerator"); // field_186029_c
-            fieldSeed = WorldInfo.class.getDeclaredField("randomSeed"); // field_76100_a
-            fieldBiomeCache = BiomeProvider.class.getDeclaredField("biomeCache"); // field_76942_f
-            fieldBiomes2 = BiomeProvider.class.getDeclaredField("biomesToSpawnIn"); // field_76943_g
-            fieldGenLayer1 = BiomeProvider.class.getDeclaredField("genBiomes"); // field_76944_d
-            fieldGenLayer2 = BiomeProvider.class.getDeclaredField("biomeIndexLayer"); // field_76945_e
+            // fieldBiomes = ChunkGeneratorOverworld.class.getDeclaredField("biomesForGeneration"); // field_185981_C
+            fieldBiomes = ObfuscationReflectionHelper.findField(ChunkGeneratorOverworld.class, "field_185981_C");
+            // fieldChunkGenerator = ChunkProviderServer.class.getDeclaredField("chunkGenerator"); // field_186029_c
+            fieldChunkGenerator = ObfuscationReflectionHelper.findField(ChunkProviderServer.class, "field_186029_c");
+            // fieldSeed = WorldInfo.class.getDeclaredField("randomSeed"); // field_76100_a
+            fieldSeed = ObfuscationReflectionHelper.findField(WorldInfo.class, "field_76100_a");
+            // fieldBiomeCache = BiomeProvider.class.getDeclaredField("biomeCache"); // field_76942_f
+            fieldBiomeCache = ObfuscationReflectionHelper.findField(BiomeProvider.class, "field_76942_f");
+            // fieldBiomes2 = BiomeProvider.class.getDeclaredField("biomesToSpawnIn"); // field_76943_g
+            fieldBiomes2 = ObfuscationReflectionHelper.findField(BiomeProvider.class, "field_76943_g");
+            // fieldGenLayer1 = BiomeProvider.class.getDeclaredField("genBiomes"); // field_76944_d
+            fieldGenLayer1 = ObfuscationReflectionHelper.findField(BiomeProvider.class, "field_76944_d");
+            // fieldGenLayer2 = BiomeProvider.class.getDeclaredField("biomeIndexLayer"); // field_76945_e
+            fieldGenLayer2 = ObfuscationReflectionHelper.findField(BiomeProvider.class, "field_76945_e");
 
-            fieldTickingBlockCount = ExtendedBlockStorage.class.getDeclaredField("tickRefCount"); // field_76683_c
-            fieldNonEmptyBlockCount = ExtendedBlockStorage.class.getDeclaredField("blockRefCount"); // field_76682_b
+            // fieldTickingBlockCount = ExtendedBlockStorage.class.getDeclaredField("tickRefCount"); // field_76683_c
+            fieldTickingBlockCount = ObfuscationReflectionHelper.findField(ExtendedBlockStorage.class, "field_76683_c");
+            // fieldNonEmptyBlockCount = ExtendedBlockStorage.class.getDeclaredField("blockRefCount"); // field_76682_b
+            fieldNonEmptyBlockCount = ObfuscationReflectionHelper.findField(ExtendedBlockStorage.class, "field_76682_b");
         } catch (Throwable e) {
             throw new RuntimeException(e);
         }
