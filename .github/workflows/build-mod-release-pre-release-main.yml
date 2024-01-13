@@ -60,16 +60,24 @@ jobs:
         run: ./gradlew build -Dhttp.socketTimeout=60000 -Dhttp.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000 -Dorg.gradle.internal.http.connectionTimeout=60000
 
       - name: Save Mod Name to GITHUB_ENV
-        run: echo "MOD_NAME=$(${{github.workspace}}/gradlew -q printModName)" >> $GITHUB_ENV
+        run: |
+          modName=$(${{github.workspace}}/gradlew -q printModName)
+          echo "MOD_NAME=$modName" >> $GITHUB_ENV
 
       - name: Save Mod Version to GITHUB_ENV
-        run: echo "MOD_VERSION=$(${{github.workspace}}/gradlew -q printModVersion)" >> $GITHUB_ENV
+        run: |
+          modVersion=$(${{github.workspace}}/gradlew -q printModVersion)
+          echo "MOD_VERSION=$modVersion" >> $GITHUB_ENV
 
       - name: Save Mod Archive Base Name to GITHUB_ENV
-        run: echo "MOD_ARCHIVE_BASE_NAME=$(${{github.workspace}}/gradlew -q printArchivesBaseName)" >> $GITHUB_ENV
+        run: |
+          modArchiveBaseName=$(${{github.workspace}}/gradlew -q printArchivesBaseName)
+          echo "MOD_ARCHIVE_BASE_NAME=$modArchiveBaseName" >> $GITHUB_ENV
 
       - name: Save Minecraft Version to GITHUB_ENV
-        run: echo "MINECRAFT_VERSION=$(${{github.workspace}}/gradlew -q printMinecraftVersion)" >> $GITHUB_ENV
+        run: |
+          minecraftVersion=$(${{github.workspace}}/gradlew -q printMinecraftVersion)
+          echo "MINECRAFT_VERSION=$minecraftVersion" >> $GITHUB_ENV
 
       - name: Copy Assembled Mod Jar to GitHub Actions Workspace
         run: cp ./build/libs/${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar ./
