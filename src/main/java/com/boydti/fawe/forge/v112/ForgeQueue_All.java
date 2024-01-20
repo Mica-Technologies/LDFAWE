@@ -86,6 +86,8 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
             Class<?> converter = Class.forName("com.sk89q.worldedit.forge.NBTConverter");
             methodFromNative = converter.getDeclaredMethod("toNative", Tag.class);
             methodToNative = converter.getDeclaredMethod("fromNative", NBTBase.class);
+            methodFromNative.setAccessible(true);
+            methodToNative.setAccessible(true);
 
             // fieldBiomes = ChunkGeneratorOverworld.class.getDeclaredField("biomesForGeneration"); // field_185981_C
             fieldBiomes = ObfuscationReflectionHelper.findField(ChunkGeneratorOverworld.class, "field_185981_C");
