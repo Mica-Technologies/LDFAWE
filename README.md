@@ -10,7 +10,7 @@ LDFAWE is a fork of the legacy [FAWE](https://github.com/boy0001/FastAsyncWorlde
 WorldEdit with new features and large performance improvements.
 
 Unlike the legacy [FAWE](https://github.com/boy0001/FastAsyncWorldedit) mod which supported versions 1.8 - 1.12 for
-Bukkit, Forge, Sponge, and Nukkit, development of LDFAWE is focused primarily on Forge 1.12.
+Bukkit, Forge, Sponge, and Nukkit, the development of LDFAWE is focused primarily on Forge 1.7.10 and 1.12 respectively. The version for 1.12 in this repo is maintained by the Mica Minecraft team, while the version for 1.7.10 is maintained independently as a separate fork of the same name in a different repo by KAMKEEL.
 
 ## Documentation
 
