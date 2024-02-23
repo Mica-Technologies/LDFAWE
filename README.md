@@ -10,7 +10,15 @@ LDFAWE is a fork of the legacy [FAWE](https://github.com/boy0001/FastAsyncWorlde
 WorldEdit with new features and large performance improvements.
 
 Unlike the legacy [FAWE](https://github.com/boy0001/FastAsyncWorldedit) mod which supported versions 1.8 - 1.12 for
-Bukkit, Forge, Sponge, and Nukkit, the development of LDFAWE is focused primarily on Forge 1.7.10 and 1.12 respectively. The version for 1.12 in this repo is maintained by the Mica Minecraft team, while the version for 1.7.10 is maintained independently as a separate fork of the same name in a different repo by KAMKEEL.
+Bukkit, Forge, Sponge, and Nukkit, the development of Mica Minecraft LDFAWE is focused primarily on Forge 1.12.
+
+### Other Minecraft Versions
+
+#### 1.7.10
+
+For those who are looking for Forge 1.7.10 support, user [KAMKEEL](https://github.com/KAMKEEL) has made a fork for
+1.7.10 called KAWE (Kam's AsyncWorldEdit).
+You can find it at [https://github.com/KAMKEEL/KAWE](https://github.com/KAMKEEL/KAWE).
 
 ## Documentation
 
@@ -31,11 +39,12 @@ Legacy versions of the official FAWE mod which support Forge 1.12 are no longer 
 
 Looking to contribute? Let us know!
 
-- Pull requests (PRs) are welcome
+- Pull requests (PRs) are always welcome
 - Let us know what has or has not been tested
-- GitHub issues are available for additional assistance
+- GitHub issues are available for additional assistance should you need it
 
 ## Disclaimer
 
 LDFAWE is not affiliated with the original, official FAWE mod, Forge, or Minecraft. LDFAWE has been developed to improve
-upon and extend support for Forge 1.12. Other game versions will not be supported by LDFAWE.
+upon and extend support for Forge 1.12. Other developers may maintain LDFAWE (or derivative) support for other versions
+of Forge through their own forks or contributions. Support for other versions of Forge is not guaranteed.
