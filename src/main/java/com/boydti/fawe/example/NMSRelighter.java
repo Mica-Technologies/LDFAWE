@@ -92,11 +92,7 @@ public class NMSRelighter implements Relighter {
                 }
             }
         } else {
-            long[][][] currentMap = concurrentLightQueue.get(index);
-            if (currentMap == null) {
-                currentMap = new long[16][][];
-                this.concurrentLightQueue.put(index, currentMap);
-            }
+            long[][][] currentMap = concurrentLightQueue.computeIfAbsent(index, k -> new long[16][][]);
             set(x & 15, y, z & 15, currentMap);
         }
     }
@@ -517,7 +513,7 @@ public class NMSRelighter implements Relighter {
                     chunk.smooth = true;
                     queue.setSkyLight(section, x, y, z, value);
                 }
-                queue.saveChunk(chunkObj);
+                if (chunkObj != null) queue.saveChunk(chunkObj);
             }
             for (RelightSkyEntry chunk : chunks) { // Smooth forwards
                 if (chunk.smooth) {
