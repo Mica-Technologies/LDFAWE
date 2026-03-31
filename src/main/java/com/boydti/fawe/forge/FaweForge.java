@@ -108,7 +108,12 @@ public class FaweForge implements IFawe {
             return null;
         }
         FawePlayer existing = Fawe.get().getCachedPlayer(player.getName());
-        return existing != null ? existing : new ForgePlayer(player);
+        if (existing != null) {
+            return existing;
+        }
+        ForgePlayer newPlayer = new ForgePlayer(player);
+        Fawe.get().register(newPlayer);
+        return newPlayer;
     }
 
     @Override
