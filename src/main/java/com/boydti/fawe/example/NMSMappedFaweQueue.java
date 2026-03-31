@@ -163,59 +163,15 @@ public abstract class NMSMappedFaweQueue<WORLD, CHUNK, CHUNKSECTION, SECTION> ex
     public abstract void relightSky(int x, int y, int z);
 
     public void setSkyLight(int x, int y, int z, int value) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return;
-            }
-        }
-        if (lastSection == null) {
-            return;
-        }
-        setSkyLight(lastSection, x, y, z, value);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return;
+        setSkyLight(section, x, y, z, value);
     }
 
     public void setBlockLight(int x, int y, int z, int value) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return;
-            }
-        }
-        if (lastSection == null) {
-            return;
-        }
-        setBlockLight(lastSection, x, y, z, value);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return;
+        setBlockLight(section, x, y, z, value);
     }
 
     public abstract void setSkyLight(SECTION section, int x, int y, int z, int value);

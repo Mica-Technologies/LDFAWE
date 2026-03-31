@@ -34,12 +34,44 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
 
     private IFaweQueueMap map;
 
-    public int lastSectionX = Integer.MIN_VALUE;
-    public int lastSectionZ = Integer.MIN_VALUE;
-    public int lastSectionY = Integer.MIN_VALUE;
-    public CHUNK lastChunk;
-    public CHUNKSECTIONS lastChunkSections;
-    public SECTION lastSection;
+    /**
+     * Per-thread cache of the most recently accessed chunk/section. Avoids repeated
+     * lookups when consecutive block operations hit the same chunk, which is the
+     * common case for region iteration. ThreadLocal eliminates the race condition
+     * that existed when these were bare public fields shared across threads.
+     */
+    protected static class SectionCache<CHUNK, CHUNKSECTIONS, SECTION> {
+        public int lastSectionX = Integer.MIN_VALUE;
+        public int lastSectionZ = Integer.MIN_VALUE;
+        public int lastSectionY = Integer.MIN_VALUE;
+        public CHUNK lastChunk;
+        public CHUNKSECTIONS lastChunkSections;
+        public SECTION lastSection;
+
+        public void clear() {
+            lastSectionX = Integer.MIN_VALUE;
+            lastSectionZ = Integer.MIN_VALUE;
+            lastSectionY = -1;
+            lastChunk = null;
+            lastChunkSections = null;
+            lastSection = null;
+        }
+    }
+
+    private final ThreadLocal<SectionCache<CHUNK, CHUNKSECTIONS, SECTION>> sectionCacheThreadLocal =
+            ThreadLocal.withInitial(SectionCache::new);
+
+    protected SectionCache<CHUNK, CHUNKSECTIONS, SECTION> getSectionCache() {
+        return sectionCacheThreadLocal.get();
+    }
+
+    // Legacy accessors — kept for subclass compatibility
+    public int getLastSectionX() { return getSectionCache().lastSectionX; }
+    public int getLastSectionZ() { return getSectionCache().lastSectionZ; }
+    public int getLastSectionY() { return getSectionCache().lastSectionY; }
+    public CHUNK getLastChunk() { return getSectionCache().lastChunk; }
+    public CHUNKSECTIONS getLastChunkSections() { return getSectionCache().lastChunkSections; }
+    public SECTION getLastSection() { return getSectionCache().lastSection; }
 
 
     private World weWorld;
@@ -370,11 +402,7 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
 
     @Override
     public void clear() {
-        lastSectionX = Integer.MIN_VALUE;
-        lastSectionZ = Integer.MIN_VALUE;
-        lastSectionY = -1;
-        lastChunk = null;
-        lastChunkSections = null;
+        getSectionCache().clear();
         map.clear();
         runTasks();
     }
@@ -385,18 +413,48 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
     }
 
     public SECTION getCachedSection(CHUNKSECTIONS chunk, int cy) {
-        return (SECTION) lastChunkSections;
+        return (SECTION) getSectionCache().lastChunkSections;
+    }
+
+    /**
+     * Ensures the section cache is populated for the given chunk/section coordinates.
+     * Returns the cached section, or null if the chunk or section doesn't exist.
+     */
+    protected SECTION ensureSectionCached(int cx, int cy, int cz) throws FaweException.FaweChunkLoadException {
+        SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
+        if (cx != cache.lastSectionX || cz != cache.lastSectionZ) {
+            cache.lastSectionX = cx;
+            cache.lastSectionZ = cz;
+            cache.lastSectionY = cy;
+            cache.lastChunk = ensureChunkLoaded(cx, cz);
+            if (cache.lastChunk != null) {
+                cache.lastChunkSections = getSections(cache.lastChunk);
+                cache.lastSection = getCachedSection(cache.lastChunkSections, cy);
+            } else {
+                cache.lastChunkSections = null;
+                cache.lastSection = null;
+            }
+        } else if (cy != cache.lastSectionY) {
+            cache.lastSectionY = cy;
+            if (cache.lastChunkSections != null) {
+                cache.lastSection = getCachedSection(cache.lastChunkSections, cy);
+            } else {
+                cache.lastSection = null;
+            }
+        }
+        return cache.lastSection;
     }
 
     public abstract int getCombinedId4Data(SECTION section, int x, int y, int z);
 
     public int getLocalCombinedId4Data(CHUNK chunk, int x, int y, int z) {
-        CHUNKSECTIONS sections = getSections(lastChunk);
+        SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
+        CHUNKSECTIONS sections = getSections(cache.lastChunk);
         SECTION section = getCachedSection(sections, y >> 4);
         if (section == null) {
             return 0;
         }
-        return getCombinedId4Data(lastSection, x, y, z);
+        return getCombinedId4Data(cache.lastSection, x, y, z);
     }
 
     public abstract int getBiome(CHUNK chunk, int x, int z);
@@ -455,35 +513,13 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
 
     @Override
     public boolean hasBlock(int x, int y, int z) throws FaweException.FaweChunkLoadException {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return false;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return false;
-            }
-        }
-        if (lastSection == null) {
-            return false;
-        }
-        return hasBlock(lastSection, x, y, z);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return false;
+        return hasBlock(section, x, y, z);
     }
 
     public boolean hasBlock(SECTION section, int x, int y, int z) {
-        return getCombinedId4Data(lastSection, x, y, z) != 0;
+        return getCombinedId4Data(section, x, y, z) != 0;
     }
 
     public int getOpacity(SECTION section, int x, int y, int z) {
@@ -527,58 +563,18 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
 
     @Override
     public int getLight(int x, int y, int z) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return 0;
-            }
-        }
-        if (lastSection == null) {
-            return 0;
-        }
-        return getLight(lastSection, x, y, z);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return 0;
+        return getLight(section, x, y, z);
     }
 
     @Override
     public int getSkyLight(int x, int y, int z) {
-        int cx = x >> 4;
-        int cz = z >> 4;
         int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return 0;
-            }
-        }
-        if (lastSection == null) {
-            if (lastChunkSections == null) {
+        SECTION section = ensureSectionCached(x >> 4, cy, z >> 4);
+        if (section == null) {
+            SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
+            if (cache.lastChunkSections == null) {
                 return 0;
             }
             int max = FaweChunk.HEIGHT >> 4;
@@ -586,14 +582,15 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
                 if (++cy >= max) {
                     return 15;
                 }
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } while (lastSection == null);
+                section = getCachedSection(cache.lastChunkSections, cy);
+            } while (section == null);
+            cache.lastSection = section;
+            cache.lastSectionY = cy;
         }
-        if (lastSection == null) {
-
+        if (section == null) {
             return getSkyLight(x, y + 16, z);
         }
-        return getSkyLight(lastSection, x, y, z);
+        return getSkyLight(section, x, y, z);
     }
 
     @Override
@@ -603,118 +600,30 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
 
     @Override
     public int getEmmittedLight(int x, int y, int z) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return 0;
-            }
-        }
-        if (lastSection == null) {
-            return 0;
-        }
-        return getEmmittedLight(lastSection, x, y, z);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return 0;
+        return getEmmittedLight(section, x, y, z);
     }
 
     @Override
     public int getOpacity(int x, int y, int z) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return 0;
-            }
-        }
-        if (lastSection == null) {
-            return 0;
-        }
-        return getOpacity(lastSection, x, y, z);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return 0;
+        return getOpacity(section, x, y, z);
     }
 
     @Override
     public int getOpacityBrightnessPair(int x, int y, int z) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return 0;
-            }
-        }
-        if (lastSection == null) {
-            return 0;
-        }
-        return getOpacityBrightnessPair(lastSection, x, y, z);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return 0;
+        return getOpacityBrightnessPair(section, x, y, z);
     }
 
     @Override
     public int getBrightness(int x, int y, int z) {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return 0;
-            }
-        }
-        if (lastSection == null) {
-            return 0;
-        }
-        return getBrightness(lastSection, x, y, z);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return 0;
+        return getBrightness(section, x, y, z);
     }
 
     @Override
@@ -728,99 +637,49 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
                 return combined;
             }
         }
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return 0;
-            }
-        }
-        if (lastSection == null) {
-            return 0;
-        }
-        return getCombinedId4Data(lastSection, x, y, z);
+        SECTION section = ensureSectionCached(cx, y >> 4, cz);
+        if (section == null) return 0;
+        return getCombinedId4Data(section, x, y, z);
     }
 
     @Override
     public int getCombinedId4Data(int x, int y, int z) throws FaweException.FaweChunkLoadException {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        int cy = y >> 4;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-                lastSection = getCachedSection(lastChunkSections, cy);
+        SECTION section = ensureSectionCached(x >> 4, y >> 4, z >> 4);
+        if (section == null) return 0;
+        return getCombinedId4Data(section, x, y, z);
+    }
+
+    /**
+     * Ensures the chunk cache is populated for the given chunk coordinates.
+     * Invalidates the section cache since biome/tile lookups don't need a section.
+     */
+    protected CHUNK ensureChunkCached(int cx, int cz) throws FaweException.FaweChunkLoadException {
+        SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
+        cache.lastSectionY = -1;
+        if (cx != cache.lastSectionX || cz != cache.lastSectionZ) {
+            cache.lastSectionX = cx;
+            cache.lastSectionZ = cz;
+            cache.lastChunk = ensureChunkLoaded(cx, cz);
+            if (cache.lastChunk != null) {
+                cache.lastChunkSections = getSections(cache.lastChunk);
             } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (cy != lastSectionY) {
-            if (lastChunkSections != null) {
-                lastSection = getCachedSection(lastChunkSections, cy);
-            } else {
-                return 0;
+                cache.lastChunkSections = null;
             }
         }
-        if (lastSection == null) {
-            return 0;
-        }
-        return getCombinedId4Data(lastSection, x, y, z);
+        return cache.lastChunk;
     }
 
     @Override
     public int getBiomeId(int x, int z) throws FaweException.FaweChunkLoadException {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        lastSectionY = -1;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-            } else {
-                lastChunkSections = null;
-                return 0;
-            }
-        } else if (lastChunk == null) {
-            return 0;
-        }
-        return getBiome(lastChunk, x, z) & 0xFF;
+        CHUNK chunk = ensureChunkCached(x >> 4, z >> 4);
+        if (chunk == null) return 0;
+        return getBiome(chunk, x, z) & 0xFF;
     }
 
     @Override
     public CompoundTag getTileEntity(int x, int y, int z) throws FaweException.FaweChunkLoadException {
-        int cx = x >> 4;
-        int cz = z >> 4;
-        lastSectionY = -1;
-        if (cx != lastSectionX || cz != lastSectionZ) {
-            lastSectionX = cx;
-            lastSectionZ = cz;
-            lastChunk = ensureChunkLoaded(cx, cz);
-            if (lastChunk != null) {
-                lastChunkSections = getSections(lastChunk);
-            } else {
-                lastChunkSections = null;
-                return null;
-            }
-        } else if (lastChunk == null) {
-            return null;
-        }
-        return getTileEntity(lastChunk, x, y, z);
+        CHUNK chunk = ensureChunkCached(x >> 4, z >> 4);
+        if (chunk == null) return null;
+        return getTileEntity(chunk, x, y, z);
     }
 }
