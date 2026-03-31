@@ -69,27 +69,42 @@ public class HistoryExtent extends AbstractDelegateExtent {
                 }
             }
         }
+        // Capture old tile entity before the block is replaced
+        boolean hadNBT = FaweCache.hasNBT(id);
+        CompoundTag oldTag = null;
+        if (hadNBT) {
+            try {
+                oldTag = queue.getTileEntity(x, y, z);
+            } catch (Throwable e) {
+                MainUtil.handleError(e, false);
+            }
+        }
+        // Set the block first
+        boolean result;
         try {
-            if (!FaweCache.hasNBT(id)) {
+            result = getExtent().setBlock(x, y, z, block);
+        } catch (FaweException ignore) {
+            return false;
+        }
+        if (!result) return false;
+        // Record to history only after a successful set
+        try {
+            if (!hadNBT) {
                 if (block.canStoreNBTData()) {
                     this.changeSet.add(x, y, z, combined, block);
                 } else {
                     this.changeSet.add(x, y, z, combined, (block.getId() << 4) + block.getData());
                 }
+            } else if (oldTag != null) {
+                this.changeSet.add(x, y, z, new BaseBlock(id, combined & 0xF, oldTag), block);
             } else {
-                try {
-                    CompoundTag tag = queue.getTileEntity(x, y, z);
-                    this.changeSet.add(x, y, z, new BaseBlock(id, combined & 0xF, tag), block);
-                } catch (Throwable e) {
-                    MainUtil.handleError(e, false);
-                    // Fall back to recording without tile entity data
-                    this.changeSet.add(x, y, z, combined, block);
-                }
+                this.changeSet.add(x, y, z, combined, block);
             }
         } catch (FaweException ignore) {
-            return false;
+            // Block was set but history recording failed (e.g., BlockBag exception).
+            // The block change stands — this matches entity create/remove behavior.
         }
-        return getExtent().setBlock(x, y, z, block);
+        return true;
     }
 
     @Override
@@ -134,22 +149,24 @@ public class HistoryExtent extends AbstractDelegateExtent {
     public boolean setBiome(Vector2D position, BaseBiome newBiome) {
         BaseBiome oldBiome = this.getBiome(position);
         if (oldBiome.getId() != newBiome.getId()) {
-            this.changeSet.addBiomeChange(position.getBlockX(), position.getBlockZ(), oldBiome, newBiome);
-            return getExtent().setBiome(position, newBiome);
-        } else {
-            return false;
+            if (getExtent().setBiome(position, newBiome)) {
+                this.changeSet.addBiomeChange(position.getBlockX(), position.getBlockZ(), oldBiome, newBiome);
+                return true;
+            }
         }
+        return false;
     }
 
     @Override
     public boolean setBiome(int x, int y, int z, BaseBiome newBiome) {
         BaseBiome oldBiome = this.getBiome(MutableBlockVector2D.get(x, z));
         if (oldBiome.getId() != newBiome.getId()) {
-            this.changeSet.addBiomeChange(x, z, oldBiome, newBiome);
-            return getExtent().setBiome(x, y, z, newBiome);
-        } else {
-            return false;
+            if (getExtent().setBiome(x, y, z, newBiome)) {
+                this.changeSet.addBiomeChange(x, z, oldBiome, newBiome);
+                return true;
+            }
         }
+        return false;
     }
 
     public class TrackedEntity implements Entity {
