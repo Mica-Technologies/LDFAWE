@@ -35,18 +35,59 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
     private IFaweQueueMap map;
 
     /**
-     * Per-thread cache of the most recently accessed chunk/section. Avoids repeated
-     * lookups when consecutive block operations hit the same chunk, which is the
-     * common case for region iteration. ThreadLocal eliminates the race condition
-     * that existed when these were bare public fields shared across threads.
+     * Per-thread cache of recently accessed chunks and the current section. Avoids
+     * repeated chunk lookups when block operations hit nearby chunks. The chunk ring
+     * buffer (4 entries) handles random-access patterns like relighting or masks that
+     * bounce between a few chunks. ThreadLocal eliminates cross-thread contention.
      */
     protected static class SectionCache<CHUNK, CHUNKSECTIONS, SECTION> {
+        private static final int CHUNK_CACHE_SIZE = 4;
+
+        // Current section state (single entry — changes constantly within a chunk)
         public int lastSectionX = Integer.MIN_VALUE;
         public int lastSectionZ = Integer.MIN_VALUE;
         public int lastSectionY = Integer.MIN_VALUE;
         public CHUNK lastChunk;
         public CHUNKSECTIONS lastChunkSections;
         public SECTION lastSection;
+
+        // Ring buffer of recently accessed chunks
+        private final int[] cachedCX = new int[CHUNK_CACHE_SIZE];
+        private final int[] cachedCZ = new int[CHUNK_CACHE_SIZE];
+        private final Object[] cachedChunks = new Object[CHUNK_CACHE_SIZE];
+        private final Object[] cachedSections = new Object[CHUNK_CACHE_SIZE];
+        private int ringIndex = 0;
+
+        public SectionCache() {
+            java.util.Arrays.fill(cachedCX, Integer.MIN_VALUE);
+            java.util.Arrays.fill(cachedCZ, Integer.MIN_VALUE);
+        }
+
+        /** Look up a chunk in the ring buffer. Returns the index, or -1 if not found. */
+        public int findChunk(int cx, int cz) {
+            for (int i = 0; i < CHUNK_CACHE_SIZE; i++) {
+                if (cachedCX[i] == cx && cachedCZ[i] == cz) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        /** Store a chunk in the ring buffer, evicting the oldest entry. */
+        @SuppressWarnings("unchecked")
+        public void storeChunk(int cx, int cz, CHUNK chunk, CHUNKSECTIONS sections) {
+            cachedCX[ringIndex] = cx;
+            cachedCZ[ringIndex] = cz;
+            cachedChunks[ringIndex] = chunk;
+            cachedSections[ringIndex] = sections;
+            ringIndex = (ringIndex + 1) % CHUNK_CACHE_SIZE;
+        }
+
+        @SuppressWarnings("unchecked")
+        public CHUNK getChunkAt(int index) { return (CHUNK) cachedChunks[index]; }
+
+        @SuppressWarnings("unchecked")
+        public CHUNKSECTIONS getSectionsAt(int index) { return (CHUNKSECTIONS) cachedSections[index]; }
 
         public void clear() {
             lastSectionX = Integer.MIN_VALUE;
@@ -55,6 +96,11 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
             lastChunk = null;
             lastChunkSections = null;
             lastSection = null;
+            java.util.Arrays.fill(cachedCX, Integer.MIN_VALUE);
+            java.util.Arrays.fill(cachedCZ, Integer.MIN_VALUE);
+            java.util.Arrays.fill(cachedChunks, null);
+            java.util.Arrays.fill(cachedSections, null);
+            ringIndex = 0;
         }
     }
 
@@ -419,6 +465,7 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
     /**
      * Ensures the section cache is populated for the given chunk/section coordinates.
      * Returns the cached section, or null if the chunk or section doesn't exist.
+     * Uses a 4-entry ring buffer for chunk lookups to reduce thrashing on random access.
      */
     protected SECTION ensureSectionCached(int cx, int cy, int cz) throws FaweException.FaweChunkLoadException {
         SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
@@ -426,21 +473,26 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
             cache.lastSectionX = cx;
             cache.lastSectionZ = cz;
             cache.lastSectionY = cy;
-            cache.lastChunk = ensureChunkLoaded(cx, cz);
-            if (cache.lastChunk != null) {
-                cache.lastChunkSections = getSections(cache.lastChunk);
-                cache.lastSection = getCachedSection(cache.lastChunkSections, cy);
+            // Check ring buffer before doing a full chunk load
+            int ringHit = cache.findChunk(cx, cz);
+            if (ringHit >= 0) {
+                cache.lastChunk = cache.getChunkAt(ringHit);
+                cache.lastChunkSections = cache.getSectionsAt(ringHit);
             } else {
-                cache.lastChunkSections = null;
-                cache.lastSection = null;
+                cache.lastChunk = ensureChunkLoaded(cx, cz);
+                if (cache.lastChunk != null) {
+                    cache.lastChunkSections = getSections(cache.lastChunk);
+                    cache.storeChunk(cx, cz, cache.lastChunk, cache.lastChunkSections);
+                } else {
+                    cache.lastChunkSections = null;
+                }
             }
+            cache.lastSection = (cache.lastChunkSections != null)
+                    ? getCachedSection(cache.lastChunkSections, cy) : null;
         } else if (cy != cache.lastSectionY) {
             cache.lastSectionY = cy;
-            if (cache.lastChunkSections != null) {
-                cache.lastSection = getCachedSection(cache.lastChunkSections, cy);
-            } else {
-                cache.lastSection = null;
-            }
+            cache.lastSection = (cache.lastChunkSections != null)
+                    ? getCachedSection(cache.lastChunkSections, cy) : null;
         }
         return cache.lastSection;
     }
@@ -659,11 +711,18 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
         if (cx != cache.lastSectionX || cz != cache.lastSectionZ) {
             cache.lastSectionX = cx;
             cache.lastSectionZ = cz;
-            cache.lastChunk = ensureChunkLoaded(cx, cz);
-            if (cache.lastChunk != null) {
-                cache.lastChunkSections = getSections(cache.lastChunk);
+            int ringHit = cache.findChunk(cx, cz);
+            if (ringHit >= 0) {
+                cache.lastChunk = cache.getChunkAt(ringHit);
+                cache.lastChunkSections = cache.getSectionsAt(ringHit);
             } else {
-                cache.lastChunkSections = null;
+                cache.lastChunk = ensureChunkLoaded(cx, cz);
+                if (cache.lastChunk != null) {
+                    cache.lastChunkSections = getSections(cache.lastChunk);
+                    cache.storeChunk(cx, cz, cache.lastChunk, cache.lastChunkSections);
+                } else {
+                    cache.lastChunkSections = null;
+                }
             }
         }
         return cache.lastChunk;
