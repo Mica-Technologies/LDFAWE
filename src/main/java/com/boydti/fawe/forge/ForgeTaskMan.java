@@ -65,7 +65,12 @@ public class ForgeTaskMan extends TaskManager {
             }
         }
         int syncSize = syncTasks.size();
+        long tickStart = System.currentTimeMillis();
         for (int i = 0; i < syncSize; i++) {
+            // Time budget: leave at least 10ms for other server tick work
+            if (i > 0 && System.currentTimeMillis() - tickStart > 40) {
+                break;
+            }
             Runnable item = syncTasks.poll();
             if (item != null) {
                 try {

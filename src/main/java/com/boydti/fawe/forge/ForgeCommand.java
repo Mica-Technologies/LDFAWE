@@ -36,6 +36,9 @@ public class ForgeCommand extends CommandBase {
                 return;
             }
             FawePlayer<Object> fp = FawePlayer.wrap(player);
+            if (fp == null) {
+                return;
+            }
             cmd.executeSafe(fp, args);
         }
     }
