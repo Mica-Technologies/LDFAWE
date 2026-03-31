@@ -276,7 +276,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     }
                     int k = FaweCache.getJ(ly, lz, lx);
                     if (array[k] != 0) {
-                        synchronized (ForgeChunk_All.class) {
+                        synchronized (this) {
                             iterator.remove();
                             tile.getValue().invalidate();
                         }

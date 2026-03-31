@@ -3,6 +3,7 @@ package com.boydti.fawe.object;
 import com.boydti.fawe.FaweCache;
 import com.boydti.fawe.object.changeset.FaweChangeSet;
 import com.boydti.fawe.object.exception.FaweException;
+import com.boydti.fawe.util.MainUtil;
 import com.sk89q.jnbt.CompoundTag;
 import com.sk89q.worldedit.*;
 import com.sk89q.worldedit.blocks.BaseBlock;
@@ -80,7 +81,8 @@ public class HistoryExtent extends AbstractDelegateExtent {
                     CompoundTag tag = queue.getTileEntity(x, y, z);
                     this.changeSet.add(x, y, z, new BaseBlock(id, combined & 0xF, tag), block);
                 } catch (Throwable e) {
-                    e.printStackTrace();
+                    MainUtil.handleError(e, false);
+                    // Fall back to recording without tile entity data
                     this.changeSet.add(x, y, z, combined, block);
                 }
             }
