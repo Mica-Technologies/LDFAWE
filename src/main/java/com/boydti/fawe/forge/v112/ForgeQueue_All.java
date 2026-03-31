@@ -138,6 +138,8 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
 
     @Override
     public int getBiome(Chunk chunk, int x, int z) {
+        int reidBiome = REIDBiomeHelper.getBiomeId(chunk, x & 15, z & 15);
+        if (reidBiome >= 0) return reidBiome;
         return chunk.getBiomeArray()[((z & 15) << 4) + (x & 15)];
     }
 
