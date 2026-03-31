@@ -56,6 +56,13 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     private final HashSet<ClipboardEntity> entities;
     private final File file;
 
+    /**
+     * Overflow map for blocks with combined IDs > Character.MAX_VALUE (block IDs > 4095).
+     * Key: linear block index, Value: full int combined ID.
+     * Only populated when overflow blocks are present.
+     */
+    private HashMap<Integer, Integer> overflowCombined;
+
     private RandomAccessFile braf;
     private MappedByteBuffer mbb;
 
@@ -335,12 +342,11 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     public void streamIds(NBTStreamer.ByteReader task) {
         try {
             mbb.force();
-            int pos = HEADER_SIZE;
             int index = 0;
             for (int y = 0; y < height; y++) {
                 for (int z = 0; z < length; z++) {
-                    for (int x = 0; x < width; x++, pos += 2) {
-                        int combinedId = mbb.getChar(pos);
+                    for (int x = 0; x < width; x++) {
+                        int combinedId = getCombinedIdAt(index);
                         task.run(index++, FaweCache.getId(combinedId));
                     }
                 }
@@ -354,12 +360,11 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     public void streamDatas(NBTStreamer.ByteReader task) {
         try {
             mbb.force();
-            int pos = HEADER_SIZE;
             int index = 0;
             for (int y = 0; y < height; y++) {
                 for (int z = 0; z < length; z++) {
-                    for (int x = 0; x < width; x++, pos += 2) {
-                        int combinedId = mbb.getChar(pos);
+                    for (int x = 0; x < width; x++) {
+                        int combinedId = getCombinedIdAt(index);
                         task.run(index++, FaweCache.getData(combinedId));
                     }
                 }
@@ -377,15 +382,15 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     @Override
     public void forEach(final BlockReader task, boolean air) {
         mbb.force();
-        int pos = HEADER_SIZE;
         IntegerTrio trio = new IntegerTrio();
         final boolean hasTile = !nbtMap.isEmpty();
+        int index = 0;
         if (air) {
             if (hasTile) {
                 for (int y = 0; y < height; y++) {
                     for (int z = 0; z < length; z++) {
-                        for (int x = 0; x < width; x++, pos += 2) {
-                            char combinedId = mbb.getChar(pos);
+                        for (int x = 0; x < width; x++, index++) {
+                            int combinedId = getCombinedIdAt(index);
                             BaseBlock block = FaweCache.getBlock(combinedId);
                             if (block.canStoreNBTData()) {
                                 trio.set(x, y, z);
@@ -402,8 +407,8 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             } else {
                 for (int y = 0; y < height; y++) {
                     for (int z = 0; z < length; z++) {
-                        for (int x = 0; x < width; x++, pos += 2) {
-                            char combinedId = mbb.getChar(pos);
+                        for (int x = 0; x < width; x++, index++) {
+                            int combinedId = getCombinedIdAt(index);
                             BaseBlock block = FaweCache.getBlock(combinedId);
                             task.run(x, y, z, block);
                         }
@@ -413,8 +418,8 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
         } else {
             for (int y = 0; y < height; y++) {
                 for (int z = 0; z < length; z++) {
-                    for (int x = 0; x < width; x++, pos += 2) {
-                        int combinedId = mbb.getChar(pos);
+                    for (int x = 0; x < width; x++, index++) {
+                        int combinedId = getCombinedIdAt(index);
                         if (combinedId != 0) {
                             BaseBlock block = FaweCache.getBlock(combinedId);
                             if (block.canStoreNBTData()) {
@@ -440,8 +445,8 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     @Override
     public BaseBlock getBlock(int x, int y, int z) {
         try {
-            int index = HEADER_SIZE + (getIndex(x, y, z) << 1);
-            int combinedId = mbb.getChar(index);
+            int linearIndex = getIndex(x, y, z);
+            int combinedId = getCombinedIdAt(linearIndex);
             BaseBlock block = FaweCache.getBlock(combinedId);
             if (block.canStoreNBTData() && !nbtMap.isEmpty()) {
                 CompoundTag nbt = nbtMap.get(new IntegerTrio(x, y, z));
@@ -461,8 +466,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     @Override
     public BaseBlock getBlock(int i) {
         try {
-            int diskIndex = (HEADER_SIZE) + (i << 1);
-            int combinedId = mbb.getChar(diskIndex);
+            int combinedId = getCombinedIdAt(i);
             BaseBlock block = FaweCache.getBlock(combinedId);
             if (block.canStoreNBTData() && !nbtMap.isEmpty()) {
                 CompoundTag nbt;
@@ -510,11 +514,24 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     @Override
     public boolean setBlock(int x, int y, int z, BaseBlock block) {
         try {
-            int index = (HEADER_SIZE) + (getIndex(x, y, z) << 1);
+            int linearIndex = getIndex(x, y, z);
+            int diskIndex = (HEADER_SIZE) + (linearIndex << 1);
             final int id = block.getId();
             final int data = block.getData();
             int combined = (id << 4) + data;
-            mbb.putChar(index, (char) combined);
+            if (combined > Character.MAX_VALUE) {
+                mbb.putChar(diskIndex, (char) 0xFFFF);
+                if (overflowCombined == null) {
+                    overflowCombined = new HashMap<>();
+                }
+                overflowCombined.put(linearIndex, combined);
+            } else {
+                mbb.putChar(diskIndex, (char) combined);
+                // Clear any previous overflow for this position
+                if (overflowCombined != null) {
+                    overflowCombined.remove(linearIndex);
+                }
+            }
             CompoundTag tile = block.getNbtData();
             if (tile != null) {
                 setTile(x, y, z, tile);
@@ -527,24 +544,63 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
 
     @Override
     public void setId(int i, int id) {
-        int index = (HEADER_SIZE) + (i << 1);
-        // 00000000 00000000
-        // [    id     ]data
-        char combined = mbb.getChar(index);
-        mbb.putChar(index, (char) ((combined & 0xF00F) + (id << 4)));
+        int diskIndex = (HEADER_SIZE) + (i << 1);
+        int oldCombined = getCombinedIdAt(i);
+        int data = oldCombined & 0xF;
+        int combined = (id << 4) + data;
+        if (combined > Character.MAX_VALUE) {
+            mbb.putChar(diskIndex, (char) 0xFFFF);
+            if (overflowCombined == null) {
+                overflowCombined = new HashMap<>();
+            }
+            overflowCombined.put(i, combined);
+        } else {
+            mbb.putChar(diskIndex, (char) combined);
+            if (overflowCombined != null) {
+                overflowCombined.remove(i);
+            }
+        }
     }
 
     public void setCombined(int i, int combined) {
-        mbb.putChar((HEADER_SIZE) + (i << 1), (char) combined);
+        if (combined > Character.MAX_VALUE) {
+            mbb.putChar((HEADER_SIZE) + (i << 1), (char) 0xFFFF);
+            if (overflowCombined == null) {
+                overflowCombined = new HashMap<>();
+            }
+            overflowCombined.put(i, combined);
+        } else {
+            mbb.putChar((HEADER_SIZE) + (i << 1), (char) combined);
+            if (overflowCombined != null) {
+                overflowCombined.remove(i);
+            }
+        }
     }
 
     @Override
     public void setAdd(int i, int add) {
-        int index = (HEADER_SIZE) + (i << 1);
-        // 00000000 00000000
-        // [    id     ]data
-        char combined = mbb.getChar(index);
-        mbb.putChar(index, (char) ((combined & 0x0FFF) + (add << 12)));
+        // setAdd adjusts the upper bits of the block ID.
+        // Reconstruct the full combined and re-store.
+        int oldCombined = getCombinedIdAt(i);
+        int id = (oldCombined >> 4) & 0xFF; // lower 8 bits of old id
+        int data = oldCombined & 0xF;
+        int newId = id + (add << 8);
+        setCombined(i, (newId << 4) + data);
+    }
+
+    /**
+     * Get the full combined ID at a linear index, resolving overflow if needed.
+     */
+    private int getCombinedIdAt(int i) {
+        int diskIndex = (HEADER_SIZE) + (i << 1);
+        int combined = mbb.getChar(diskIndex);
+        if (combined == 0xFFFF && overflowCombined != null) {
+            Integer overflow = overflowCombined.get(i);
+            if (overflow != null) {
+                return overflow;
+            }
+        }
+        return combined;
     }
 
     @Override
