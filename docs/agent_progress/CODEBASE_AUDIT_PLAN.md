@@ -228,4 +228,100 @@ New `IntegerTrio` objects created per light update. Should reuse mutableBlockPos
 | P2 High | 9 | Race conditions, resource leaks, NPEs |
 | P3 Medium | 8 | Error handling, edge cases, thread safety |
 | P4 Low | 5 | Dead code, allocations, code quality |
-| **Total** | **29** | |
+| **Subtotal** | **29** | |
+
+---
+
+## Performance & Server Stability (Large Operations)
+
+A focused audit on what happens with massive operations (10M+ blocks). These are separate from
+the correctness bugs above — they address crash prevention, throttling, and throughput.
+
+### P0: Server Crash / Deadlock Risks
+
+### P0-1. SetQueue.awaitQuiescence() blocks forever
+**File:** `util/SetQueue.java:174-185`
+```java
+pool.awaitQuiescence(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
+```
+If any chunk processor hangs (reflection failure, world unload, etc.), the entire server thread
+deadlocks permanently.
+- [ ] Replace `Long.MAX_VALUE` with `Settings.IMP.QUEUE.DISCARD_AFTER_MS`
+
+### P0-2. PREVENT_CRASHES defaults to false
+**File:** `config/Settings.java:44`
+When off, FAWE uses `DefaultFaweQueueMap` with hard references — every queued chunk stays in
+memory until processed. A 100M-block operation can exhaust the heap with no safety net.
+- [ ] Change default to `true`
+- [ ] Consider always enabling for operations above a configurable block count threshold
+
+### P0-3. ForgeTaskMan.onServerTick() has no time budget
+**File:** `forge/ForgeTaskMan.java:57-78`
+All sync tasks run in a single tick without checking elapsed time. If SetQueue adds thousands
+of lighting/chunk tasks, the server tick stalls for seconds.
+```java
+for (int i = 0; i < syncSize; i++) {
+    // No time check — runs ALL tasks in one tick
+    item.run();
+}
+```
+- [ ] Add time budget: `System.currentTimeMillis() - start < 40` (leave 10ms for other tick work)
+
+### P1: Queue Management & Memory
+
+### P1-1. Unbounded activeQueues accumulation
+**File:** `util/SetQueue.java:210-221`
+No size limit on `activeQueues`. Hundreds of queues from rapid-fire operations pile up.
+- [ ] Add max queue count (e.g., 100), reject/defer new operations when full
+
+### P1-2. MemUtil.calculateMemory() doesn't detect pressure early enough
+**File:** `util/MemUtil.java:39-52`
+Returns `Integer.MAX_VALUE` (all clear) while `heapSize < heapMaxSize`. The heap grows until
+full before any pressure is detected. By then it's too late for graceful abort.
+- [ ] Add early threshold: trigger slowdown at e.g. 512MB free, not at 1% free
+
+### P1-3. FaweQueue.flush() wait loop only executes once
+**File:** `object/FaweQueue.java:496-504`
+```java
+this.wait(time);  // Waits once, then loop condition may still be true but exits
+```
+- [ ] Fix loop to re-check and re-wait until actually empty or true timeout exceeded
+
+### P2: Performance Bottlenecks
+
+### P2-1. Progress callback fires per-chunk (62,500 times for 1M blocks)
+**File:** `example/DefaultFaweQueueMap.java:34-39`
+Every `put()` in the chunk map calls `getProgressTask().run()`, which formats a string and
+sends a packet to the player. For large operations, this is 62,500 network packets.
+- [ ] Throttle to at most once per 100ms or once per 100 chunks
+
+### P2-2. Sky light lookup loops up to 16 sections per block
+**File:** `example/MappedFaweQueue.java:585-590`
+When querying sky light for a block in an empty section, the code loops upward through sections
+until it finds a non-null one. For blocks near y=0 in a world with empty sections above, this
+is 16 iterations per block.
+- [ ] Cache the "first non-null section above" per chunk column
+
+### P2-3. PARALLEL_THREADS defaults to CPU count (no cap)
+**File:** `config/Settings.java:262`
+On a 32-core server, 32 threads all contend on world/chunk locks. Diminishing returns above ~8.
+- [ ] Cap default at `Math.min(8, availableProcessors())`
+
+### P2-4. Section cache thrashes on random access patterns
+**File:** `example/MappedFaweQueue.java:37-42, 461-596`
+The single-entry cache (`lastSectionX/Y/Z`) works well for sequential scans but misses on
+every block for random access patterns (common in copy/paste with transforms).
+- [ ] Consider a small LRU cache (4-8 entries) for recently accessed sections
+
+---
+
+## Updated Summary Statistics
+
+| Severity | Count | Description |
+|----------|-------|-------------|
+| P0 Crash/Deadlock | 3 | Server-killing issues |
+| P1 Critical | 7+3 | Logic inversions, data corruption, security, memory |
+| P2 High | 9+4 | Race conditions, resource leaks, performance |
+| P3 Medium | 8 | Error handling, edge cases, thread safety |
+| P4 Low | 5 | Dead code, allocations, code quality |
+| **Total** | **39** | |
