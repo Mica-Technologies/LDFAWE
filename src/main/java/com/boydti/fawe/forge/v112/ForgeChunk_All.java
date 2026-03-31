@@ -364,14 +364,16 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                 }
                 getParent().setCount(0, getParent().getNonEmptyBlockCount(section) + nonEmptyBlockCount, section);
             }
-            // Set biomes
+            // Set biomes — use REID's API when available, vanilla path otherwise
             if (this.biomes != null) {
-                byte[] currentBiomes = nmsChunk.getBiomeArray();
-                for (int i = 0; i < this.biomes.length; i++) {
-                    byte biome = this.biomes[i];
-                    if (biome != 0) {
-                        if (biome == -1) biome = 0;
-                        currentBiomes[i] = biome;
+                if (!REIDBiomeHelper.applyBiomes(nmsChunk, this.biomes)) {
+                    byte[] currentBiomes = nmsChunk.getBiomeArray();
+                    for (int i = 0; i < this.biomes.length; i++) {
+                        byte biome = this.biomes[i];
+                        if (biome != 0) {
+                            if (biome == -1) biome = 0;
+                            currentBiomes[i] = biome;
+                        }
                     }
                 }
             }
