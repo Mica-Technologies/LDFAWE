@@ -2,27 +2,37 @@
 
 ## Resume Prompt
 
-> We are working on LDFAWE, a Forge 1.12.2 fork of FastAsyncWorldEdit. This session covered:
+> We are working on LDFAWE, a Forge 1.12.2 fork of FastAsyncWorldEdit. Progress so far:
 >
 > 1. **Build system** — RESOLVED. Updated to GregTech Buildscripts v1762213476, RFG 1.4.0,
 >    Gradle 8.9. Added `buildscript.properties`.
 >
-> 2. **Block ID overflow (>4095)** — Phases 1-4 IMPLEMENTED, Phase 5 PENDING USER TESTING.
->    Hybrid sparse cache with HashMap overflow for high-ID blocks. See `FAWECACHE_BLOCK_ID_PLAN.md`.
+> 2. **Block ID overflow (>4095)** — COMPLETE. User-tested and confirmed working with high-ID
+>    modded blocks. Hybrid sparse cache with HashMap overflow. See `FAWECACHE_BLOCK_ID_PLAN.md`.
 >
 > 3. **Codebase audit** — 25 of 39 items FIXED. All P0 crash risks and P1 critical bugs resolved.
 >    Most P2/P3 done. 5 architectural items remain. See `CODEBASE_AUDIT_PLAN.md`.
 >
-> 4. **setbiome investigation** — PRELIMINARY. The fix is likely REID-side (mixin-based).
->    LDFAWE biome pipeline is sound but uses `byte` storage (truncates biome IDs > 127).
->    User is testing with REID 2.3.0 on a dedicated server.
+> 4. **setbiome with REID** — FIXED in LDFAWE. REID replaces vanilla biome storage with int[];
+>    FAWE was writing to a dummy byte[] that REID ignores. Added `REIDBiomeHelper.java` that
+>    uses reflection to call REID's BiomeApi for reads/writes and sends network sync packets.
+>    User-tested and confirmed working in singleplayer. Client-side network sync added but
+>    not yet tested (should eliminate need to rejoin world to see changes).
+>    Dedicated server testing still pending.
 >
-> **What to do next:** Wait for user testing results on (a) block ID overflow with high-ID modded
-> blocks and (b) setbiome with REID 2.3.0 on dedicated server. Then address findings.
-> Remaining audit items in `CODEBASE_AUDIT_PLAN.md` are architectural and can be tackled
-> incrementally. The 5 open items are: P2-1 (MappedFaweQueue threading), P2-9 (overflow
-> persistence to disk), P3-1 (HistoryExtent ordering), P4-4 (boilerplate extraction),
-> Perf P2-2/P2-4 (section cache optimizations).
+> 5. **GitHub Actions** — Updated workflows to latest action versions (checkout v6,
+>    setup-java v5, setup-gradle v6, action-gh-release v2). CSM update plan created at
+>    `E:\gitRepos\minecraft-city-super-mod\assets\docs\agent_progress\GITHUB_ACTIONS_UPDATE_STEPS.md`.
+>
+> 6. **Git hygiene** — Removed `.claude/settings.local.json` from history via rebase,
+>    added `.claude/` to `.gitignore`.
+>
+> **What to do next:** Test (a) setbiome on dedicated server, (b) whether biome changes are
+> visible to clients immediately (without rejoin) thanks to the network sync. Remaining audit
+> items in `CODEBASE_AUDIT_PLAN.md` are architectural and can be tackled incrementally.
+> The 5 open items are: P2-1 (MappedFaweQueue threading), P2-9 (overflow persistence to disk),
+> P3-1 (HistoryExtent ordering), P4-4 (boilerplate extraction), Perf P2-2/P2-4 (section cache
+> optimizations).
 
 ## Checklist
 
@@ -88,67 +98,77 @@ The fix uses a hybrid sparse cache approach: keep the existing `char[]` fast pat
 
 ---
 
-### 4. Investigate `setbiome` Command Failure — PRELIMINARY INVESTIGATION COMPLETE
+### 4. Investigate `setbiome` Command Failure — FIXED IN LDFAWE
 
 - [x] Trace the command execution path from input through to biome application
 - [x] Investigate REID PR #53 for biome-related fixes
-- [ ] Test with REID 2.3.0 on dedicated server (USER TESTING PENDING)
-- [ ] If still broken, investigate further
+- [x] Test with REID 2.3.0 in singleplayer — broken (biomes not applied)
+- [x] Root-cause analysis — FAWE writes to dummy byte[] that REID ignores
+- [x] Implement REID-compatible biome writes via reflection-based BiomeApi bridge
+- [x] User testing confirms fix works in singleplayer
+- [x] Add client-side network sync via REID's MessageManager
+- [ ] Test on dedicated server (PENDING)
+- [ ] Test that client sees biome change immediately without world rejoin (PENDING)
 
-**Findings:**
+**Root Cause:**
 
-**REID is responsible for the fix, not LDFAWE or LDWE.** REID PR #53 adds mixins
-(`MixinBiomeCommands`, `MixinForgeWorld`) that intercept WorldEdit's `//setbiome` command and
-route biome changes through REID's custom network messages (`BiomePositionChangeMessage`,
-`BiomeAreaChangeMessage`, `BiomeChunkChangeMessage`). This is needed because REID extends
-biome IDs to 32-bit integers, which vanilla WorldEdit doesn't understand.
+REID replaces vanilla's `byte[256]` biome storage with an internal `int[256]` via
+`BiomeContainer`. It makes `Chunk.getBiomeArray()` return a **dummy error array** and
+**cancels** `Chunk.setBiomeArray(byte[])` entirely. FAWE's async pipeline bypasses
+WorldEdit's normal biome path (which REID's `MixinForgeWorld` intercepts) and writes
+directly to `nmsChunk.getBiomeArray()` — which under REID is a throwaway array. Biome
+writes silently went nowhere.
 
-**LDFAWE's biome pipeline is architecturally sound:**
-```
-//setbiome → BiomeReplace → FlatRegionVisitor → EditSession.setBiome()
-  → FastWorldEditExtent → MappedFaweQueue.setBiome() → CharFaweChunk.biomes[]
-  → ForgeChunk_All.call() → nmsChunk.getBiomeArray()
-```
+REID's `MixinBiomeCommands` intercepts WorldEdit's `BiomeCommands.setBiome()`, but FAWE
+handles the command before WorldEdit does, so REID's mixin never fires for FAWE operations.
 
-**Potential issues to watch for during testing:**
+**Fix (implemented in LDFAWE — no REID fork needed):**
 
-1. **Server vs singleplayer:** REID's fix uses custom network messages to sync extended biome IDs
-   to clients. On a dedicated server, the packet path differs from integrated server. If REID's
-   message handlers aren't registered correctly on the dedicated server side, biomes may be set
-   server-side but never synced to clients — classic "works in singleplayer, broken on server."
+New file `REIDBiomeHelper.java` — reflection-based bridge to REID's public API:
+- Detects REID at runtime by checking for `tff.reid.api.BiomeApi`
+- `applyBiomes()` reads current `int[]` from REID, overlays FAWE's changes, writes back
+  via `BiomeApi.replaceBiomes()`, then sends `BiomeChunkChangeMessage` to tracking clients
+- `getBiomeId()` reads biome at a position via `BiomeAccessor`
+- Falls back gracefully when REID is not installed
 
-2. **LDFAWE byte truncation:** `CharFaweChunk.biomes[]` is a `byte[]` (values -128 to 127). If
-   REID assigns biome IDs > 127, LDFAWE will truncate them. This would only matter if FAWE's
-   async path is used for the biome write (REID's mixin may bypass FAWE entirely).
+Modified files:
+- `ForgeChunk_All.call()` — biome write uses REID API when available, vanilla fallback
+- `ForgeQueue_All.getBiome()` — biome read uses REID API when available, vanilla fallback
 
-3. **Biome 0 sentinel:** CharFaweChunk converts biome 0 to -1 (sentinel for "unset"), then
-   converts back on application. This round-trips correctly but is fragile.
+**Known limitations:**
+- FAWE's internal biome storage is `byte[256]`, so biome IDs > 255 are truncated. This is
+  a separate enhancement (would require widening `CharFaweChunk.biomes` to `int[]`).
+- Biome ID 0 uses a sentinel value (-1) internally; round-trips correctly but is fragile.
 
-**Testing plan:**
-- Test `//setbiome` with REID 2.3.0 on the dedicated server
-- If it works: great, REID's mixin handles it
-- If it fails on server but works in singleplayer: REID network message registration issue
-- If it fails everywhere: may need to check if REID's mixin conflicts with FAWE's async pipeline
+**Server considerations:**
+- `sendClientsBiomeChunkChange()` uses `sendToAllTracking()` which sends to all players
+  who have the chunk loaded — works correctly on dedicated servers.
+- FAWE's `ForgeChunk_All.call()` can run from a ForkJoinPool thread; Forge's
+  `SimpleNetworkWrapper` sends through Netty which is thread-safe.
 
 **References:**
-- REID PR #53: github.com/TerraFirmaCraft-The-Final-Frontier/RoughlyEnoughIDs/pull/53
-- REID issues #9 (setbiome broken) and #13 (BiomeStaff compat)
-- Upstream JEID issues: #97, #40, #145, #187, #196
-- User's REID version: upgrading from 2.2.3 → 2.3.0
+- REID source: E:\gitRepos\RoughlyEnoughIDs
+- REID BiomeApi: `tff.reid.api.BiomeApi` (public API)
+- REID BiomeContainer: `org.dimdev.jeid.impl.type.BiomeContainer` (internal int[] storage)
+- REID MixinChunk: cancels `setBiomeArray()`, returns dummy from `getBiomeArray()`
+- REID MessageManager: `sendClientsBiomeChunkChange(World, BlockPos, int[])`
 - LDWE source: E:\gitRepos\LDWE
 
 ---
 
 ## Session Statistics
 
-**Total commits this session:** 20 (from `a64af8ef` through `c1be6ff6`)
+**Session 1 commits:** 20 (from `a64af8ef` through `c1be6ff6`, now rebased)
 
-**Files modified:** 25+ across the codebase
+**Session 2 commits:** 3 (GitHub Actions update, REID biome fix, client sync)
 
 **Key deliverables:**
-- Agent documentation baseline (CLAUDE.md, docs/, .claude/settings.local.json)
+- Agent documentation baseline (CLAUDE.md, docs/)
 - Build system updated to latest GregTech Buildscripts
 - Block ID overflow support (FaweCache, CharFaweChunk, ForgeChunk_All, ForgeQueue_All,
-  DiskOptimizedClipboard, FaweFormat)
+  DiskOptimizedClipboard, FaweFormat) — user-tested, confirmed working
 - 25 bug fixes and optimizations across the codebase
+- REID biome compatibility (`REIDBiomeHelper.java`) — fixes `//setbiome` with REID present
+- GitHub Actions updated to latest versions
+- Git history cleaned (removed `.claude/` from commits, added to `.gitignore`)
 - 3 progress/plan documents in docs/agent_progress/
