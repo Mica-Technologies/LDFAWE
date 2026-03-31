@@ -18,18 +18,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set Up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
-          distribution: 'corretto'
+          distribution: 'zulu'
           java-version: '17'
 
       - name: Setup Gradle
-        uses: gradle/gradle-build-action@v2
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Create Version Numbers
         run: |
@@ -96,7 +96,7 @@ jobs:
 
       - name: Create Release Entry
         if: ${{ github.event.inputs.release == 'true' && github.event.inputs.release }}
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -119,7 +119,7 @@ jobs:
 
       - name: Create Pre-Release Entry
         if: ${{ github.event.inputs.release == 'false' || !github.event.inputs.release }}
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
