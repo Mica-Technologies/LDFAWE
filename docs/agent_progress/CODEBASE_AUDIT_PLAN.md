@@ -36,12 +36,11 @@
 
 ## Priority 2: High-Severity Issues
 
-### P2-1. MappedFaweQueue race condition on cache fields
+### P2-1. MappedFaweQueue race condition on cache fields — FIXED
 **File:** `example/MappedFaweQueue.java:37-42`
-Six public mutable fields (`lastSectionX/Y/Z`, `lastChunk`, `lastChunkSections`, `lastSection`)
-are accessed from multiple threads without synchronization.
-- [ ] Investigate thread access patterns — determine if queues are truly accessed from multiple
-      threads or if the single-thread-per-queue model makes this safe in practice
+Six public mutable cache fields wrapped in a `ThreadLocal<SectionCache>` so each thread gets
+its own cache. Also extracted the repeated 15-line cache pattern into `ensureSectionCached()`
+and `ensureChunkCached()` helpers (addresses P4-4).
 
 ### P2-2. NMSRelighter busy-wait spin lock — FIXED
 **File:** `example/NMSRelighter.java:305` — Replaced busy-wait `while` with single
@@ -69,9 +68,10 @@ round-robin distribution. Also added null-skip for empty thread groups in join l
 **File:** `object/clipboard/DiskOptimizedClipboard.java:304` — `close()` is now `synchronized`,
 removed `finalize()` override.
 
-### P2-9. DiskOptimizedClipboard overflowCombined not persisted
+### P2-9. DiskOptimizedClipboard overflowCombined not persisted — FIXED
 **File:** `object/clipboard/DiskOptimizedClipboard.java:64`
-- [ ] Serialize overflow to a sidecar file or extend the disk format
+Overflow HashMap now persisted to `.bd.overflow` sidecar file on flush/close and reloaded
+when opening existing clipboards.
 
 ---
 
@@ -126,9 +126,9 @@ map storage since mutable objects can't be HashMap keys. No change needed.
 ### P4-3. ForgeQueue_All commented-out setMCA() method — FIXED
 **File:** `forge/v112/ForgeQueue_All.java` — Removed 120 lines of dead commented-out code.
 
-### P4-4. MappedFaweQueue repeated cache-loading boilerplate
+### P4-4. MappedFaweQueue repeated cache-loading boilerplate — FIXED
 **File:** `example/MappedFaweQueue.java:461-596`
-- [ ] Extract to helper method
+Extracted into `ensureSectionCached()` and `ensureChunkCached()` helpers as part of P2-1 fix.
 
 ### P4-5. NMSRelighter unnecessary allocations in hot loop — NOT A BUG
 **File:** `example/NMSRelighter.java:188, 248` — New IntegerTrio objects are stored as HashMap
@@ -200,6 +200,9 @@ this.wait(time);  // Waits once, then loop condition may still be true but exits
 ### P2-4. Section cache thrashes on random access patterns
 **File:** `example/MappedFaweQueue.java:37-42, 461-596`
 - [ ] Consider a small LRU cache (4-8 entries) for recently accessed sections
+  *Note: P2-1 moved cache to ThreadLocal, eliminating cross-thread thrashing. Single-entry
+  cache within a thread is still fine for sequential iteration (the common case). LRU would
+  only help random-access patterns, which are rare.*
 
 ---
 
