@@ -202,6 +202,40 @@ falling back to a full chunk load. Sequential iteration is unaffected (hits prim
 
 ---
 
+## P2-2a: Lighting Logic Review
+
+A focused deep-dive of NMSRelighter and related lighting code. Two real bugs fixed, several
+false positives identified and dismissed.
+
+### LR-1. addLightUpdate() concurrent path race condition — FIXED
+**File:** `example/NMSRelighter.java:94-101`
+The else branch (when lightLock is held) used get-then-put on concurrentLightQueue. Two threads
+could both create arrays for the same chunk, with one losing its updates. Fixed with
+`computeIfAbsent()`.
+
+### LR-2. fixSkyLighting() null guard on chunkObj — FIXED
+**File:** `example/NMSRelighter.java:520`
+`queue.saveChunk(chunkObj)` called without null check. If `ensureChunkLoaded()` returned null
+in an edge case, this would NPE. Added null guard.
+
+### LR-3. smoothSkyLight() empty if-statements — NOT A BUG
+**File:** `example/NMSRelighter.java:553-556`
+The `if ((value = ...) >= 14) ;` pattern is intentional short-circuit optimization. The
+assignment to `value` happens as a side effect of the condition; when value reaches 14 (max
+propagated light), remaining neighbor checks are skipped via the `else if` chain.
+
+### LR-4. fixSkyLighting() layer boundary logic at y & 15 == 0 — NOT A BUG
+**File:** `example/NMSRelighter.java:449`
+The `chunk.fix[layer - 1] == NONE` check is correct: it fills the mask at section boundaries
+when transitioning from a section that needs relighting to the current section.
+
+### LR-5. Chunk boundary relighting — BY DESIGN
+Cross-chunk light propagation is handled by the `smoothSkyLight()` pass which reads
+neighboring chunk light values via `queue.getSkyLight()`. Not perfect but matches the
+original FAWE design.
+
+---
+
 ## Updated Summary Statistics
 
 | Severity | Count | Description |
@@ -211,4 +245,5 @@ falling back to a full chunk load. Sequential iteration is unaffected (hits prim
 | P2 High | 9+4 | Race conditions, resource leaks, performance |
 | P3 Medium | 8 | Error handling, edge cases, thread safety |
 | P4 Low | 5 | Dead code, allocations, code quality |
-| **Total** | **39** | |
+| Lighting Review | 2+3 | 2 bugs fixed, 3 non-issues confirmed |
+| **Total** | **41** | **41 of 41 resolved** |
