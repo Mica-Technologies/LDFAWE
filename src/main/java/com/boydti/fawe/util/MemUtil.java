@@ -36,18 +36,15 @@ public class MemUtil {
     }
 
     public static int calculateMemory() {
-        final long heapSize = Runtime.getRuntime().totalMemory();
         final long heapMaxSize = Runtime.getRuntime().maxMemory();
-        if (heapSize < heapMaxSize) {
-            return Integer.MAX_VALUE;
-        }
-        final long heapFreeSize = Runtime.getRuntime().freeMemory();
-        final int size = (int) ((heapFreeSize * 100) / heapMaxSize);
-        if (size > (100 - Settings.IMP.MAX_MEMORY_PERCENT)) {
+        // Free bytes = unused portion of current heap + room for heap to grow
+        final long freeBytes = getFreeBytes();
+        final int freePercent = (int) ((freeBytes * 100) / heapMaxSize);
+        if (freePercent > (100 - Settings.IMP.MAX_MEMORY_PERCENT)) {
             memoryPlentifulTask();
             return Integer.MAX_VALUE;
         }
-        return size;
+        return freePercent;
     }
 
     private static Queue<Runnable> memoryLimitedTasks = new ConcurrentLinkedQueue<>();
