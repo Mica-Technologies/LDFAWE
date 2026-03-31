@@ -302,11 +302,44 @@ public class NMSRelighter implements Relighter {
 
     public void fixBlockLighting() {
         synchronized (lightQueue) {
-            while (!lightLock.compareAndSet(false, true));
-            try {
-                updateBlockLight(this.lightQueue);
-            } finally {
-                lightLock.set(false);
+            // Merge any concurrent updates that arrived while lock was held
+            if (!concurrentLightQueue.isEmpty()) {
+                for (Map.Entry<Long, long[][][]> entry : concurrentLightQueue.entrySet()) {
+                    long[][][] existing = lightQueue.get(entry.getKey());
+                    if (existing == null) {
+                        lightQueue.put(entry.getKey(), entry.getValue());
+                    } else {
+                        mergeLightArrays(existing, entry.getValue());
+                    }
+                }
+                concurrentLightQueue.clear();
+            }
+            if (lightLock.compareAndSet(false, true)) {
+                try {
+                    updateBlockLight(this.lightQueue);
+                } finally {
+                    lightLock.set(false);
+                }
+            }
+        }
+    }
+
+    private void mergeLightArrays(long[][][] target, long[][][] source) {
+        for (int z = 0; z < source.length; z++) {
+            if (source[z] == null) continue;
+            if (target[z] == null) {
+                target[z] = source[z];
+                continue;
+            }
+            for (int x = 0; x < source[z].length; x++) {
+                if (source[z][x] == null) continue;
+                if (target[z][x] == null) {
+                    target[z][x] = source[z][x];
+                    continue;
+                }
+                for (int i = 0; i < source[z][x].length; i++) {
+                    target[z][x][i] |= source[z][x][i];
+                }
             }
         }
     }

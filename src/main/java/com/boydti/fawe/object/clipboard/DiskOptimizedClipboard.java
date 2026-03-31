@@ -296,12 +296,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     }
 
     @Override
-    protected void finalize() throws Throwable {
-        close();
-    }
-
-    @Override
-    public void close() {
+    public synchronized void close() {
         try {
             if (mbb != null) {
                 mbb.force();
