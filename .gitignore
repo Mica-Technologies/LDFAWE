@@ -81,3 +81,6 @@ local.properties
 run/
 
 logs/
+
+### Claude Code ###
+.claude/
