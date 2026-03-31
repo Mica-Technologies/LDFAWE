@@ -10,6 +10,19 @@ import java.util.*;
 
 public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T> {
 
+    /**
+     * Sentinel value stored in the char[][] ids array to indicate that the real combined block ID
+     * is in the overflow map (because it exceeds Character.MAX_VALUE).
+     */
+    public static final char OVERFLOW_SENTINEL = 0xFFFF;
+
+    /**
+     * The combined ID that the sentinel value would normally represent: block ID 4095, data 15.
+     * If a block legitimately has this combined value, it is NOT an overflow — only values stored
+     * via the overflow map are overflow blocks.
+     */
+    private static final int SENTINEL_COMBINED = (0xFFF << 4) | 0xF;
+
     public final char[][] ids;
     public final short[] count;
     public final short[] air;
@@ -19,6 +32,13 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
     public HashMap<Short, CompoundTag> tiles;
     public HashSet<CompoundTag> entities;
     public HashSet<UUID> entityRemoves;
+
+    /**
+     * Sparse overflow map for blocks with combined IDs > Character.MAX_VALUE.
+     * Key: (section << 12) | positionInSection, Value: full int combined ID.
+     * Only allocated when overflow blocks are actually present.
+     */
+    private HashMap<Integer, Integer> overflowIds;
 
     public T chunk;
 
@@ -144,7 +164,48 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
         if (array == null) {
             return 0;
         }
-        return array[FaweCache.getJ(y, z, x)];
+        int j = FaweCache.getJ(y, z, x);
+        char value = array[j];
+        if (value == OVERFLOW_SENTINEL && overflowIds != null) {
+            Integer overflow = overflowIds.get((i << 12) | j);
+            if (overflow != null) {
+                return overflow;
+            }
+        }
+        return value;
+    }
+
+    /**
+     * Store a combined block ID that exceeds Character.MAX_VALUE in the overflow map.
+     */
+    private void setOverflow(int section, int j, int combined) {
+        if (overflowIds == null) {
+            overflowIds = new HashMap<>();
+        }
+        overflowIds.put((section << 12) | j, combined);
+    }
+
+    /**
+     * Remove an overflow entry (when a block is overwritten with a normal-range value).
+     */
+    private void clearOverflow(int section, int j) {
+        if (overflowIds != null) {
+            overflowIds.remove((section << 12) | j);
+        }
+    }
+
+    /**
+     * Get the overflow map for this chunk. May be null if no overflow blocks exist.
+     */
+    public HashMap<Integer, Integer> getOverflowIds() {
+        return overflowIds;
+    }
+
+    /**
+     * Set the overflow map (used when copying chunks).
+     */
+    public void setOverflowIds(HashMap<Integer, Integer> overflow) {
+        this.overflowIds = overflow;
     }
 
     @Override
@@ -214,6 +275,8 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
                     break;
             }
         }
+        // Clear any previous overflow for this position
+        clearOverflow(i, j);
         switch (id) {
             case 0:
                 this.air[i]++;
@@ -236,7 +299,13 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
             case 50:
             case 10:
             default:
-                vs[j] = (char) (id << 4);
+                int combined = id << 4;
+                if (combined > Character.MAX_VALUE) {
+                    vs[j] = OVERFLOW_SENTINEL;
+                    setOverflow(i, j, combined);
+                } else {
+                    vs[j] = (char) combined;
+                }
                 heightMap[z << 4 | x] = (byte) y;
                 return;
         }
@@ -260,6 +329,8 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
                     break;
             }
         }
+        // Clear any previous overflow for this position
+        clearOverflow(i, j);
         switch (id) {
             case 0:
                 this.air[i]++;
@@ -322,10 +393,17 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
             case 174:
             case 190:
             case 191:
-            case 192:
-                vs[j] = (char) (id << 4);
+            case 192: {
+                int combined = id << 4;
+                if (combined > Character.MAX_VALUE) {
+                    vs[j] = OVERFLOW_SENTINEL;
+                    setOverflow(i, j, combined);
+                } else {
+                    vs[j] = (char) combined;
+                }
                 heightMap[z << 4 | x] = (byte) y;
                 return;
+            }
             case 130:
             case 76:
             case 62:
@@ -339,10 +417,17 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
             case 61:
             case 65:
             case 68: // removed
-            default:
-                vs[j] = (char) ((id << 4) + data);
+            default: {
+                int combined = (id << 4) + data;
+                if (combined > Character.MAX_VALUE) {
+                    vs[j] = OVERFLOW_SENTINEL;
+                    setOverflow(i, j, combined);
+                } else {
+                    vs[j] = (char) combined;
+                }
                 heightMap[z << 4 | x] = (byte) y;
                 return;
+            }
         }
     }
 
