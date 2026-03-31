@@ -77,9 +77,10 @@ when opening existing clipboards.
 
 ## Priority 3: Medium-Severity Issues
 
-### P3-1. HistoryExtent records changes before block is actually set
+### P3-1. HistoryExtent records changes before block is actually set — FIXED
 **File:** `object/HistoryExtent.java:56-91`
-- [ ] Record to changeSet only after successful setBlock, or add compensation
+Old state (combined ID + tile entity) is now captured before set, then recorded to changeSet
+only after `getExtent().setBlock()` succeeds. Also fixed `setBiome` methods for same issue.
 
 ### P3-2. HistoryExtent swallows tile entity exceptions — FIXED
 **File:** `object/HistoryExtent.java:79-85` — Replaced raw `e.printStackTrace()` with
