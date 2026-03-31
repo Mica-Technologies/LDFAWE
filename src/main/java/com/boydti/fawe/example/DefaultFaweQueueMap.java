@@ -29,13 +29,19 @@ public class DefaultFaweQueueMap implements IFaweQueueMap {
             return put((long) key, value);
         }
 
+        private long lastProgressUpdate;
+
         @Override
         public FaweChunk put(long key, FaweChunk value) {
             if (parent.getProgressTask() != null) {
-                try {
-                    parent.getProgressTask().run(FaweQueue.ProgressType.QUEUE, size() + 1);
-                } catch (Throwable e) {
-                    e.printStackTrace();
+                long now = System.currentTimeMillis();
+                if (now - lastProgressUpdate > 100) {  // Throttle to at most 10 updates/sec
+                    lastProgressUpdate = now;
+                    try {
+                        parent.getProgressTask().run(FaweQueue.ProgressType.QUEUE, size() + 1);
+                    } catch (Throwable e) {
+                        e.printStackTrace();
+                    }
                 }
             }
             synchronized (this) {
