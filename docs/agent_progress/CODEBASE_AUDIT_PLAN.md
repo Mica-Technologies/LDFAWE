@@ -39,61 +39,38 @@
 ### P2-1. MappedFaweQueue race condition on cache fields
 **File:** `example/MappedFaweQueue.java:37-42`
 Six public mutable fields (`lastSectionX/Y/Z`, `lastChunk`, `lastChunkSections`, `lastSection`)
-are accessed from multiple threads without synchronization. Every method that calls
-`ensureChunkLoaded()` is affected (~25 methods).
+are accessed from multiple threads without synchronization.
 - [ ] Investigate thread access patterns — determine if queues are truly accessed from multiple
       threads or if the single-thread-per-queue model makes this safe in practice
-- [ ] If multi-threaded: add synchronization or use ThreadLocal caches
 
-### P2-2. NMSRelighter busy-wait spin lock
-**File:** `example/NMSRelighter.java:305`
-```java
-while (!lightLock.compareAndSet(false, true));  // Busy-wait inside synchronized
-```
-CPU-wasting spin loop inside a synchronized block. Risk of deadlock if another thread holds
-`lightLock` while trying to acquire `synchronized(lightQueue)`.
-- [ ] Replace with `if (!lightLock.getAndSet(true))` or proper lock
+### P2-2. NMSRelighter busy-wait spin lock — FIXED
+**File:** `example/NMSRelighter.java:305` — Replaced busy-wait `while` with single
+`compareAndSet()` check. Also added concurrentLightQueue merge (fixes P2-3).
 
-### P2-3. NMSRelighter concurrentLightQueue updates may be lost
-**File:** `example/NMSRelighter.java:80-102`
-When the lightLock is taken, updates go to `concurrentLightQueue`. But `fixBlockLighting()`
-only processes `lightQueue`, not `concurrentLightQueue`.
-- [ ] Verify if `concurrentLightQueue` is merged elsewhere; if not, add merge step
+### P2-3. NMSRelighter concurrentLightQueue updates may be lost — FIXED
+**File:** `example/NMSRelighter.java:303+` — `fixBlockLighting()` now merges
+`concurrentLightQueue` into `lightQueue` before processing, with bitwise OR for overlapping entries.
 
 ### P2-4. ForgeChunk_All class-level synchronization
 **File:** `forge/v112/ForgeChunk_All.java:279`
-```java
-synchronized (ForgeChunk_All.class) {  // Locks ALL instances
-```
-Tile entity trimming uses a class-level lock, blocking all concurrent chunk processing.
 - [ ] Replace with per-instance or per-chunk lock
 
-### P2-5. FaweForge.wrap() doesn't cache new player objects
-**File:** `forge/FaweForge.java:110-111`
-```java
-return existing != null ? existing : new ForgePlayer(player);  // Not cached!
-```
-Creates duplicate ForgePlayer instances, causing memory leak and session state fragmentation.
-- [ ] Register new ForgePlayer in the cache after creation
+### P2-5. FaweForge.wrap() doesn't cache new player objects — FIXED
+**File:** `forge/FaweForge.java:110-114` — New ForgePlayer now registered via `Fawe.get().register()`
 
 ### P2-6. ForgeCommand.java NPE on null FawePlayer.wrap() — FIXED
 **File:** `forge/ForgeCommand.java:38` — Added null guard before `executeSafe()`
 
 ### P2-7. TaskManager.parallel() array sizing bug
 **File:** `util/TaskManager.java:112-114`
-Integer division loses remainder, causing some tasks to never be queued.
-- [ ] Fix array allocation or switch to List-based distribution
+- [ ] Fix array allocation or switch to List-based distribution (method is @Deprecated)
 
-### P2-8. DiskOptimizedClipboard close/finalize race
-**File:** `object/clipboard/DiskOptimizedClipboard.java:299-319`
-`finalize()` calls `close()` without synchronization. `close()` checks `mbb != null` without
-a lock. Concurrent access during GC causes corruption.
-- [ ] Add synchronization to close(), remove finalize() (deprecated since Java 9)
+### P2-8. DiskOptimizedClipboard close/finalize race — FIXED
+**File:** `object/clipboard/DiskOptimizedClipboard.java:304` — `close()` is now `synchronized`,
+removed `finalize()` override.
 
 ### P2-9. DiskOptimizedClipboard overflowCombined not persisted
 **File:** `object/clipboard/DiskOptimizedClipboard.java:64`
-The overflow map for high block IDs is in-memory only. On disk reload, overflow blocks become
-`0xFFFF` (block ID 4095, data 15) instead of their real value.
 - [ ] Serialize overflow to a sidecar file or extend the disk format
 
 ---
@@ -102,48 +79,33 @@ The overflow map for high block IDs is in-memory only. On disk reload, overflow 
 
 ### P3-1. HistoryExtent records changes before block is actually set
 **File:** `object/HistoryExtent.java:56-91`
-If `getExtent().setBlock()` fails after changeSet.add(), undo will revert a change that never
-happened, corrupting the world.
 - [ ] Record to changeSet only after successful setBlock, or add compensation
 
 ### P3-2. HistoryExtent swallows tile entity exceptions
 **File:** `object/HistoryExtent.java:79-85`
-Broad `catch (Throwable e)` with only `e.printStackTrace()`. Tile entity data silently lost
-during undo/redo (chests, furnaces lose contents).
 - [ ] Log properly via MainUtil, consider failing the operation instead
 
 ### P3-3. MappedFaweQueue.getCachedSection() ignores chunk parameter
 **File:** `example/MappedFaweQueue.java:388`
-Always returns `lastChunkSections` regardless of which chunk is passed.
 - [ ] Investigate if this is intentional (caller always passes lastChunk) or a bug
 
-### P3-4. TaskManager.wait() timeout parameter ignored
-**File:** `util/TaskManager.java:292-307`
-The `timout` parameter is passed to `wait()` but the loop only breaks based on
-`DISCARD_AFTER_MS`, effectively ignoring the caller's requested timeout.
-- [ ] Fix timeout logic to respect the parameter
+### P3-4. TaskManager.wait() timeout parameter ignored — FIXED
+**File:** `util/TaskManager.java:292-307` — Fixed typo (`timout`→`timeout`), loop now breaks
+when elapsed time exceeds the caller's requested timeout.
 
-### P3-5. MainUtil.handleError() dead code
-**File:** `util/MainUtil.java:729-753`
-Formatted error output code is unreachable (after a `return` statement). All errors just get
-raw `e.printStackTrace()`.
-- [ ] Either restore the formatted output or remove the dead code
+### P3-5. MainUtil.handleError() dead code — FIXED
+**File:** `util/MainUtil.java:733-753` — Restored formatted debug output; `debug=false` gets
+raw stack trace, `debug=true` gets formatted FAWE header with truncated trace.
 
-### P3-6. CPUOptimizedClipboard.getAdd() NPE when add is null
-**File:** `object/clipboard/CPUOptimizedClipboard.java:114-116`
-`add[index]` accessed without null check on the `add` array. Called from `getBlock()` when
-`add != null` check is done at the caller — but `getAdd()` is also public.
-- [ ] Add null guard in `getAdd()` itself
+### P3-6. CPUOptimizedClipboard.getAdd() NPE when add is null — FIXED
+**File:** `object/clipboard/CPUOptimizedClipboard.java:114` — Returns 0 when `add` is null.
 
-### P3-7. MemoryOptimizedClipboard uninitialized cache fields
-**File:** `object/clipboard/MemoryOptimizedClipboard.java:240-247`
-`lastI`, `lastIMin`, `lastIMax` default to 0, which could match index 0 incorrectly on first
-call.
-- [ ] Initialize to -1 or use a separate `initialized` flag
+### P3-7. MemoryOptimizedClipboard uninitialized cache fields — FIXED
+**File:** `object/clipboard/MemoryOptimizedClipboard.java:55-57` — Initialized `lastI`,
+`lastIMin`, `lastIMax` to -1 so first access always recalculates.
 
 ### P3-8. DiskOptimizedClipboard.getIndex() cache not thread-safe
 **File:** `object/clipboard/DiskOptimizedClipboard.java:336-442`
-`ylast`/`zlast` cache fields are not synchronized. Concurrent clipboard access corrupts indices.
 - [ ] Document single-threaded usage requirement or add synchronization
 
 ---
@@ -154,24 +116,19 @@ call.
 **File:** `example/NMSRelighter.java:41`
 - [ ] Remove or use it instead of allocating new IntegerTrio objects in the hot loop
 
-### P4-2. Redundant System.gc() calls
-**File:** `util/MemUtil.java:22-24, 68-69`
-`System.gc()` called twice in sequence. One call is sufficient.
-- [ ] Remove duplicate calls
+### P4-2. Redundant System.gc() calls — FIXED
+**File:** `util/MemUtil.java:22, 68` — Removed duplicate `System.gc()` calls.
 
 ### P4-3. ForgeQueue_All commented-out setMCA() method
 **File:** `forge/v112/ForgeQueue_All.java:163-283`
-Large block of dead code.
 - [ ] Remove or document with TODO
 
 ### P4-4. MappedFaweQueue repeated cache-loading boilerplate
 **File:** `example/MappedFaweQueue.java:461-596`
-Same chunk/section loading pattern repeated ~20 times.
 - [ ] Extract to helper method
 
 ### P4-5. NMSRelighter unnecessary allocations in hot loop
 **File:** `example/NMSRelighter.java:188, 248`
-New `IntegerTrio` objects created per light update. Should reuse mutableBlockPos.
 - [ ] Reuse mutable objects
 
 ---
@@ -226,28 +183,18 @@ this.wait(time);  // Waits once, then loop condition may still be true but exits
 
 ### P2: Performance Bottlenecks
 
-### P2-1. Progress callback fires per-chunk (62,500 times for 1M blocks)
-**File:** `example/DefaultFaweQueueMap.java:34-39`
-Every `put()` in the chunk map calls `getProgressTask().run()`, which formats a string and
-sends a packet to the player. For large operations, this is 62,500 network packets.
-- [ ] Throttle to at most once per 100ms or once per 100 chunks
+### P2-1. Progress callback fires per-chunk (62,500 times for 1M blocks) — FIXED
+**File:** `example/DefaultFaweQueueMap.java:34-39` — Throttled to at most once per 100ms.
 
 ### P2-2. Sky light lookup loops up to 16 sections per block
 **File:** `example/MappedFaweQueue.java:585-590`
-When querying sky light for a block in an empty section, the code loops upward through sections
-until it finds a non-null one. For blocks near y=0 in a world with empty sections above, this
-is 16 iterations per block.
 - [ ] Cache the "first non-null section above" per chunk column
 
-### P2-3. PARALLEL_THREADS defaults to CPU count (no cap)
-**File:** `config/Settings.java:262`
-On a 32-core server, 32 threads all contend on world/chunk locks. Diminishing returns above ~8.
-- [ ] Cap default at `Math.min(8, availableProcessors())`
+### P2-3. PARALLEL_THREADS defaults to CPU count (no cap) — FIXED
+**File:** `config/Settings.java:267` — Capped at `Math.min(8, availableProcessors())`
 
 ### P2-4. Section cache thrashes on random access patterns
 **File:** `example/MappedFaweQueue.java:37-42, 461-596`
-The single-entry cache (`lastSectionX/Y/Z`) works well for sequential scans but misses on
-every block for random access patterns (common in copy/paste with transforms).
 - [ ] Consider a small LRU cache (4-8 entries) for recently accessed sections
 
 ---
