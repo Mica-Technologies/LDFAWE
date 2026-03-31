@@ -52,9 +52,9 @@ public class MemoryOptimizedClipboard extends FaweClipboard {
     private boolean saveDatas = false;
     private boolean saveAdd = false;
     private int compressionLevel;
-    private int lastI;
-    private int lastIMin;
-    private int lastIMax;
+    private int lastI = -1;
+    private int lastIMin = -1;
+    private int lastIMax = -1;
     private int ylast;
     private int ylasti;
     private int zlast;
@@ -238,7 +238,7 @@ public class MemoryOptimizedClipboard extends FaweClipboard {
     }
 
     public int getLocalIndex(int index) {
-        if (index < lastIMin || index > lastIMax) {
+        if (lastIMin < 0 || index < lastIMin || index > lastIMax) {
             lastI = index >> BLOCK_SHIFT;
             lastIMin = lastI << BLOCK_SHIFT;
             lastIMax = lastIMin + BLOCK_MASK;

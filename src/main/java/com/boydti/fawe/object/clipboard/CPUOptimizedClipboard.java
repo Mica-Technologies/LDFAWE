@@ -112,7 +112,7 @@ public class CPUOptimizedClipboard extends FaweClipboard {
     }
 
     public int getAdd(int index) {
-        return add[index] & 0xFF;
+        return add != null ? add[index] & 0xFF : 0;
     }
 
     public int getData(int index) {
