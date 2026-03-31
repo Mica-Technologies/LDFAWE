@@ -51,6 +51,11 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
         public CHUNKSECTIONS lastChunkSections;
         public SECTION lastSection;
 
+        // Sky light upward-scan cache: avoids re-scanning null sections for the same chunk
+        public int skyScanChunkX = Integer.MIN_VALUE;
+        public int skyScanChunkZ = Integer.MIN_VALUE;
+        public int skyScanResultY = -1; // section Y of first non-null section found, or -1
+
         // Ring buffer of recently accessed chunks
         private final int[] cachedCX = new int[CHUNK_CACHE_SIZE];
         private final int[] cachedCZ = new int[CHUNK_CACHE_SIZE];
@@ -96,6 +101,9 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
             lastChunk = null;
             lastChunkSections = null;
             lastSection = null;
+            skyScanChunkX = Integer.MIN_VALUE;
+            skyScanChunkZ = Integer.MIN_VALUE;
+            skyScanResultY = -1;
             java.util.Arrays.fill(cachedCX, Integer.MIN_VALUE);
             java.util.Arrays.fill(cachedCZ, Integer.MIN_VALUE);
             java.util.Arrays.fill(cachedChunks, null);
@@ -622,22 +630,42 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
 
     @Override
     public int getSkyLight(int x, int y, int z) {
+        int cx = x >> 4;
+        int cz = z >> 4;
         int cy = y >> 4;
-        SECTION section = ensureSectionCached(x >> 4, cy, z >> 4);
+        SECTION section = ensureSectionCached(cx, cy, cz);
         if (section == null) {
             SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
             if (cache.lastChunkSections == null) {
                 return 0;
             }
-            int max = FaweChunk.HEIGHT >> 4;
-            do {
-                if (++cy >= max) {
-                    return 15;
+            // Use cached scan result if we've already scanned this chunk column
+            if (cache.skyScanChunkX == cx && cache.skyScanChunkZ == cz && cache.skyScanResultY >= 0) {
+                if (cy < cache.skyScanResultY) {
+                    // Jump directly to the known first non-null section
+                    cy = cache.skyScanResultY;
+                    section = getCachedSection(cache.lastChunkSections, cy);
+                    if (section != null) {
+                        cache.lastSection = section;
+                        cache.lastSectionY = cy;
+                    }
                 }
-                section = getCachedSection(cache.lastChunkSections, cy);
-            } while (section == null);
-            cache.lastSection = section;
-            cache.lastSectionY = cy;
+            }
+            if (section == null) {
+                int max = FaweChunk.HEIGHT >> 4;
+                do {
+                    if (++cy >= max) {
+                        return 15;
+                    }
+                    section = getCachedSection(cache.lastChunkSections, cy);
+                } while (section == null);
+                cache.lastSection = section;
+                cache.lastSectionY = cy;
+                // Cache the scan result for this chunk column
+                cache.skyScanChunkX = cx;
+                cache.skyScanChunkZ = cz;
+                cache.skyScanResultY = cy;
+            }
         }
         if (section == null) {
             return getSkyLight(x, y + 16, z);
