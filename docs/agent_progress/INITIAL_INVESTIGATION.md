@@ -58,17 +58,27 @@ The fix uses a hybrid sparse cache approach: keep the existing `char[]` fast pat
 
 ---
 
-### 3. Codebase Audit — Bugs & Optimization Opportunities
+### 3. Codebase Audit — Bugs & Optimization Opportunities — INVESTIGATION COMPLETE
 
-- [ ] Deep-dive analysis of the full LDFAWE codebase
-- [ ] Document obvious bugs (crashes, silent failures, data corruption, edge cases)
-- [ ] Document optimization opportunities (performance, memory, code quality) without losing
+- [x] Deep-dive analysis of the full LDFAWE codebase
+- [x] Document obvious bugs (crashes, silent failures, data corruption, edge cases)
+- [x] Document optimization opportunities (performance, memory, code quality) without losing
       functionality
-- [ ] Create a new progress plan (`CODEBASE_AUDIT_PLAN.md`) with findings and actionable items
+- [x] Create a new progress plan (`CODEBASE_AUDIT_PLAN.md`) with findings and actionable items
+- [ ] Implement fixes (see `CODEBASE_AUDIT_PLAN.md` — 29 items across 4 priority levels)
 
-**Goal:** Systematically review the mod's major subsystems (queue, chunk, clipboard, commands,
-NBT/anvil, relighting, etc.) for correctness and performance issues. The output should be a
-prioritized list of fixes and improvements that can be tackled incrementally.
+**Result:** Audited three subsystems: (1) async queue/chunk/relighting, (2) clipboard/history/undo,
+(3) commands/config/utilities. Found 29 issues: 7 critical (logic inversions, data corruption,
+security bypass), 9 high (race conditions, resource leaks, NPEs), 8 medium, 5 low.
+
+**Top critical findings:**
+- `FaweChunk.equals()` returns `true` when hashes differ (inverted `!=`)
+- `NMSRelighter` bitset overflow corrupts lighting for blocks above y=63
+- `RollbackDatabase.delete()` never calls `executeUpdate()`
+- `Settings.getLimit()` uses `Math.max()` instead of `Math.min()` (security bypass)
+- `ForgePlayer.sendTitle()` globally disables progress display for all players
+
+**Full plan:** See `docs/agent_progress/CODEBASE_AUDIT_PLAN.md`
 
 ---
 
