@@ -2,7 +2,6 @@ package com.boydti.fawe.forge;
 
 import com.boydti.fawe.Fawe;
 import com.boydti.fawe.config.BBC;
-import com.boydti.fawe.config.Settings;
 import com.boydti.fawe.object.FaweLocation;
 import com.boydti.fawe.object.FawePlayer;
 import com.boydti.fawe.wrappers.PlayerWrapper;
@@ -20,13 +19,13 @@ public class ForgePlayer extends FawePlayer<EntityPlayerMP> {
     }
 
     @Override
-    public void sendTitle(String head, String sub) { // Not supported
-        Settings.IMP.QUEUE.PROGRESS.DISPLAY = "false";
+    public void sendTitle(String head, String sub) {
+        // Title display not supported on Forge — no-op
     }
 
     @Override
-    public void resetTitle() { // Not supported
-        Settings.IMP.QUEUE.PROGRESS.DISPLAY = "false";
+    public void resetTitle() {
+        // Title display not supported on Forge — no-op
     }
 
     @Override

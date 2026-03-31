@@ -103,6 +103,7 @@ public class RollbackDatabase extends AsyncNotifyQueue {
                     byte[] uuidBytes = ByteBuffer.allocate(16).putLong(uuid.getMostSignificantBits()).putLong(uuid.getLeastSignificantBits()).array();
                     stmt.setBytes(1, uuidBytes);
                     stmt.setInt(2, id);
+                    stmt.executeUpdate();
                 } catch (SQLException e) {
                     e.printStackTrace();
                 }

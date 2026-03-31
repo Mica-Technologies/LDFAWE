@@ -340,7 +340,7 @@ public abstract class FaweChunk<T> implements Callable<FaweChunk> {
         if ((obj == null) || obj.hashCode() != hashCode() || !(obj instanceof FaweChunk)) {
             return false;
         }
-        return longHash() != ((FaweChunk) obj).longHash();
+        return longHash() == ((FaweChunk) obj).longHash();
     }
 
     public abstract FaweChunk<T> copy(boolean shallow);
