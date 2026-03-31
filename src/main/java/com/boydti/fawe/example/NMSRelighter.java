@@ -73,7 +73,7 @@ public class NMSRelighter implements Relighter {
         if (m2 == null) {
             m2 = m1[x] = new long[4];
         }
-        long value = m2[y >> 6] |= 1l << y;
+        long value = m2[y >> 6] |= 1L << (y & 63);
     }
 
     public void addLightUpdate(int x, int y, int z) {

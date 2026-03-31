@@ -172,7 +172,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
     public boolean flush() {
         super.flush();
         synchronized (this) {
-            boolean flushed = osBD != null || osBIO != null || osNBTF != null || osNBTT != null && osENTCF != null || osENTCT != null;
+            boolean flushed = osBD != null || osBIO != null || osNBTF != null || osNBTT != null || osENTCF != null || osENTCT != null;
             try {
                 if (osBD != null) osBD.flush();
                 if (osBIO != null) osBIO.flush();
@@ -191,7 +191,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
     public boolean close() {
         super.close();
         synchronized (this) {
-            boolean flushed = osBD != null || osBIO != null || osNBTF != null || osNBTT != null && osENTCF != null || osENTCT != null;
+            boolean flushed = osBD != null || osBIO != null || osNBTF != null || osNBTT != null || osENTCF != null || osENTCT != null;
             try {
                 if (osBD != null) {
                     osBD.close();
@@ -244,16 +244,16 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
             total += bioFile.length();
         }
         if (nbtfFile.exists()) {
-            total += entfFile.length();
+            total += nbtfFile.length();
         }
         if (nbttFile.exists()) {
-            total += entfFile.length();
+            total += nbttFile.length();
         }
         if (entfFile.exists()) {
             total += entfFile.length();
         }
         if (enttFile.exists()) {
-            total += entfFile.length();
+            total += enttFile.length();
         }
         return total;
     }
