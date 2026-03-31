@@ -485,7 +485,9 @@ public interface FaweQueue extends HasFaweQueue, Extent {
     }
 
     /**
-     * Lock the thread until the queue is empty
+     * Lock the thread until the queue is empty or the timeout is exceeded.
+     *
+     * @param time maximum total time to wait in milliseconds
      */
     default void flush(int time) {
         if (size() > 0) {
@@ -493,12 +495,17 @@ public interface FaweQueue extends HasFaweQueue, Extent {
                 SetQueue.IMP.flush(this);
             } else {
                 if (enqueue()) {
+                    long deadline = System.currentTimeMillis() + time;
                     while (!isEmpty() && getStage() == SetQueue.QueueStage.ACTIVE) {
+                        long remaining = deadline - System.currentTimeMillis();
+                        if (remaining <= 0) break;
                         synchronized (this) {
                             try {
-                                this.wait(time);
+                                // Poll in short intervals so we detect completion promptly
+                                this.wait(Math.min(remaining, 50));
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
+                                break;
                             }
                         }
                     }
