@@ -87,6 +87,7 @@ public class FaweFormat implements ClipboardReader, ClipboardWriter {
         boolean from = false;
         boolean small = false;
         boolean knownSize = false;
+        boolean extendedIds = false;
         switch (mode) {
             case 0:
                 knownSize = true;
@@ -102,6 +103,10 @@ public class FaweFormat implements ClipboardReader, ClipboardWriter {
             case 4:
                 small = true;
                 from = true;
+                break;
+            case 5:
+                knownSize = true;
+                extendedIds = true;
                 break;
         }
         if (knownSize) {
@@ -119,7 +124,12 @@ public class FaweFormat implements ClipboardReader, ClipboardWriter {
                 for (int y = 0; y < height; y++) {
                     for (int x = 0; x < width; x++) {
                         for (int z = 0; z < length; z++) {
-                            int combined = in.readUnsignedShort();
+                            int combined;
+                            if (extendedIds) {
+                                combined = in.readInt();
+                            } else {
+                                combined = in.readUnsignedShort();
+                            }
                             int id = FaweCache.getId(combined);
                             int data = FaweCache.getData(combined);
                             BaseBlock block = FaweCache.getBlock(id, data);
@@ -298,7 +308,8 @@ public class FaweFormat implements ClipboardReader, ClipboardWriter {
                     if (from) {
                         out.writeShort((short) 0);
                     }
-                    out.writeShort((short) FaweCache.getCombined(block));
+                    int blockCombined = FaweCache.getCombined(block);
+                    out.writeShort((short) Math.min(blockCombined, Character.MAX_VALUE));
                     break;
                 }
                 int i = (small ? 3 : 5) + (from ? 4 : 2);
@@ -323,7 +334,44 @@ public class FaweFormat implements ClipboardReader, ClipboardWriter {
                             if (block.getId() == 0) {
                                 out.writeShort((short) 0);
                             } else {
-                                out.writeShort((short) FaweCache.getCombined(block));
+                                int combined = FaweCache.getCombined(block);
+                                // Clamp to 16-bit for mode 0 compat; mode 5 handles overflow
+                                out.writeShort((short) Math.min(combined, Character.MAX_VALUE));
+                                if (block.hasNbtData()) {
+                                    CompoundTag tile = block.getNbtData();
+                                    Map<String, Tag> map = ReflectionUtils.getMap(tile.getValue());
+                                    map.put("id", new StringTag(block.getNbtId()));
+                                    map.put("x", new IntTag(x - min.getBlockX()));
+                                    map.put("y", new IntTag(y - min.getBlockY()));
+                                    map.put("z", new IntTag(z - min.getBlockZ()));
+                                    tiles.add(tile);
+                                }
+                            }
+                        }
+                    }
+                }
+                break;
+            }
+            case 5: {
+                // Mode 5: Extended block ID support (4 bytes per block instead of 2)
+                out.writeShort((short) width);
+                out.writeShort((short) height);
+                out.writeShort((short) length);
+                out.writeShort((short) origin.getBlockX());
+                out.writeShort((short) origin.getBlockY());
+                out.writeShort((short) origin.getBlockZ());
+                MutableBlockVector mutable5 = new MutableBlockVector(0, 0, 0);
+                for (int y = min.getBlockY(); y <= max.getBlockY(); y++) {
+                    mutable5.mutY(y);
+                    for (int x = min.getBlockX(); x <= max.getBlockX(); x++) {
+                        mutable5.mutX(x);
+                        for (int z = min.getBlockZ(); z <= max.getBlockZ(); z++) {
+                            mutable5.mutZ(z);
+                            BaseBlock block = clipboard.getBlock(mutable5);
+                            if (block.getId() == 0) {
+                                out.writeInt(0);
+                            } else {
+                                out.writeInt(FaweCache.getCombined(block));
                                 if (block.hasNbtData()) {
                                     CompoundTag tile = block.getNbtData();
                                     Map<String, Tag> map = ReflectionUtils.getMap(tile.getValue());
