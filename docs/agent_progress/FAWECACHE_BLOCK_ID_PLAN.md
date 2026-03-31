@@ -119,13 +119,18 @@ overflow awareness. Overflow blocks will be treated as block ID 4095 (sentinel >
 purposes. This is acceptable — they'll be treated as solid opaque blocks, which is correct for
 most modded blocks and far better than the previous behavior of treating them as air.
 
-### Phase 4: Clipboard & I/O Compatibility (Medium Risk)
+### Phase 4: Clipboard & I/O Compatibility (Medium Risk) — DONE
 
-- [ ] **4a.** `DiskOptimizedClipboard` — currently uses `putChar()` for block storage. Add a
-      header version flag and overflow section for high-ID blocks.
-- [ ] **4b.** `FaweFormat` — `writeShort()` truncates. Add format version support for 32-bit
-      block IDs.
-- [ ] **4c.** Ensure old schematics/clipboards still load (backward compat).
+- [x] **4a.** `DiskOptimizedClipboard` — added in-memory `overflowCombined` HashMap. All read
+      paths (`getBlock`, `forEach`, `streamIds`, `streamDatas`) use `getCombinedIdAt()` which
+      resolves overflow. All write paths (`setBlock`, `setId`, `setCombined`, `setAdd`) route
+      overflow blocks to the map with sentinel `0xFFFF` on disk.
+- [x] **4b.** `FaweFormat` — added mode 5 with `writeInt`/`readInt` (4 bytes per block) for
+      full combined ID support. Modes 0-4 (16-bit) are clamped to `Character.MAX_VALUE` on write
+      to avoid silent corruption. Mode 5 read path uses `readInt()`.
+- [x] **4c.** Backward compat: modes 0-4 read path is unchanged. Old files load fine.
+      `CPUOptimizedClipboard` and `MemoryOptimizedClipboard` already support high IDs via their
+      `add` byte array (`id = base + (add << 8)`) — no changes needed.
 
 ### Phase 5: Validation & Testing
 
