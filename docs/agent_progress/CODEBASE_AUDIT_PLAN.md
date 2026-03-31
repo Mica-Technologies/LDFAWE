@@ -51,9 +51,9 @@ are accessed from multiple threads without synchronization.
 **File:** `example/NMSRelighter.java:303+` — `fixBlockLighting()` now merges
 `concurrentLightQueue` into `lightQueue` before processing, with bitwise OR for overlapping entries.
 
-### P2-4. ForgeChunk_All class-level synchronization
-**File:** `forge/v112/ForgeChunk_All.java:279`
-- [ ] Replace with per-instance or per-chunk lock
+### P2-4. ForgeChunk_All class-level synchronization — FIXED
+**File:** `forge/v112/ForgeChunk_All.java:279` — Changed `synchronized(ForgeChunk_All.class)` to
+`synchronized(this)` for per-instance locking.
 
 ### P2-5. FaweForge.wrap() doesn't cache new player objects — FIXED
 **File:** `forge/FaweForge.java:110-114` — New ForgePlayer now registered via `Fawe.get().register()`
@@ -81,9 +81,9 @@ removed `finalize()` override.
 **File:** `object/HistoryExtent.java:56-91`
 - [ ] Record to changeSet only after successful setBlock, or add compensation
 
-### P3-2. HistoryExtent swallows tile entity exceptions
-**File:** `object/HistoryExtent.java:79-85`
-- [ ] Log properly via MainUtil, consider failing the operation instead
+### P3-2. HistoryExtent swallows tile entity exceptions — FIXED
+**File:** `object/HistoryExtent.java:79-85` — Replaced raw `e.printStackTrace()` with
+`MainUtil.handleError(e, false)` for proper error handling.
 
 ### P3-3. MappedFaweQueue.getCachedSection() ignores chunk parameter
 **File:** `example/MappedFaweQueue.java:388`
@@ -112,24 +112,25 @@ raw stack trace, `debug=true` gets formatted FAWE header with truncated trace.
 
 ## Priority 4: Low-Severity / Code Quality
 
-### P4-1. NMSRelighter.mutableBlockPos allocated but never used
-**File:** `example/NMSRelighter.java:41`
-- [ ] Remove or use it instead of allocating new IntegerTrio objects in the hot loop
+### P4-1. NMSRelighter.mutableBlockPos allocated but never used — NOT A BUG
+**File:** `example/NMSRelighter.java:41` — Actually IS used as a reusable lookup key in
+`containsKey()` calls (lines 247, 254, 269). New IntegerTrio allocations are necessary for
+map storage since mutable objects can't be HashMap keys. No change needed.
 
 ### P4-2. Redundant System.gc() calls — FIXED
 **File:** `util/MemUtil.java:22, 68` — Removed duplicate `System.gc()` calls.
 
-### P4-3. ForgeQueue_All commented-out setMCA() method
-**File:** `forge/v112/ForgeQueue_All.java:163-283`
-- [ ] Remove or document with TODO
+### P4-3. ForgeQueue_All commented-out setMCA() method — FIXED
+**File:** `forge/v112/ForgeQueue_All.java` — Removed 120 lines of dead commented-out code.
 
 ### P4-4. MappedFaweQueue repeated cache-loading boilerplate
 **File:** `example/MappedFaweQueue.java:461-596`
 - [ ] Extract to helper method
 
-### P4-5. NMSRelighter unnecessary allocations in hot loop
-**File:** `example/NMSRelighter.java:188, 248`
-- [ ] Reuse mutable objects
+### P4-5. NMSRelighter unnecessary allocations in hot loop — NOT A BUG
+**File:** `example/NMSRelighter.java:188, 248` — New IntegerTrio objects are stored as HashMap
+keys and queue entries; mutable objects can't be used for this. The existing `mutableBlockPos`
+is correctly used only for transient `containsKey()` lookups. No change needed.
 
 ---
 
