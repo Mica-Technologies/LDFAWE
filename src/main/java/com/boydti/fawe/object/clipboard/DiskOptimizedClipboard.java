@@ -20,7 +20,11 @@ import com.sk89q.worldedit.extent.clipboard.BlockArrayClipboard;
 import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.world.biome.BaseBiome;
 import java.io.Closeable;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.Field;
@@ -90,6 +94,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             if ((braf.length() - HEADER_SIZE) == (volume << 1) + area) {
                 hasBiomes = true;
             }
+            loadOverflow();
             autoCloseTask();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -262,6 +267,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     @Override
     public void flush() {
         mbb.force();
+        saveOverflow();
     }
 
     public DiskOptimizedClipboard(int width, int height, int length) {
@@ -300,6 +306,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
         try {
             if (mbb != null) {
                 mbb.force();
+                saveOverflow();
                 fc.close();
                 braf.close();
                 file.setWritable(true);
@@ -596,6 +603,52 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             }
         }
         return combined;
+    }
+
+    private File getOverflowFile() {
+        return new File(file.getPath() + ".overflow");
+    }
+
+    /**
+     * Persist overflow block IDs to a sidecar file so they survive clipboard save/reload.
+     * Format: int count, then (int index, int combinedId) pairs.
+     */
+    private void saveOverflow() {
+        File overflowFile = getOverflowFile();
+        if (overflowCombined == null || overflowCombined.isEmpty()) {
+            overflowFile.delete();
+            return;
+        }
+        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(overflowFile))) {
+            dos.writeInt(overflowCombined.size());
+            for (Map.Entry<Integer, Integer> entry : overflowCombined.entrySet()) {
+                dos.writeInt(entry.getKey());
+                dos.writeInt(entry.getValue());
+            }
+        } catch (IOException e) {
+            MainUtil.handleError(e);
+        }
+    }
+
+    /**
+     * Load overflow block IDs from the sidecar file if it exists.
+     */
+    private void loadOverflow() {
+        File overflowFile = getOverflowFile();
+        if (!overflowFile.exists()) return;
+        try (DataInputStream dis = new DataInputStream(new FileInputStream(overflowFile))) {
+            int count = dis.readInt();
+            if (count > 0) {
+                overflowCombined = new HashMap<>(count);
+                for (int i = 0; i < count; i++) {
+                    int index = dis.readInt();
+                    int combined = dis.readInt();
+                    overflowCombined.put(index, combined);
+                }
+            }
+        } catch (IOException e) {
+            MainUtil.handleError(e);
+        }
     }
 
     @Override
