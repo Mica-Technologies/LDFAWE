@@ -195,12 +195,10 @@ completion promptly instead of sleeping the full duration each iteration.
 ### P2-3. PARALLEL_THREADS defaults to CPU count (no cap) — FIXED
 **File:** `config/Settings.java:267` — Capped at `Math.min(8, availableProcessors())`
 
-### P2-4. Section cache thrashes on random access patterns
+### P2-4. Section cache thrashes on random access patterns — FIXED
 **File:** `example/MappedFaweQueue.java:37-42, 461-596`
-- [ ] Consider a small LRU cache (4-8 entries) for recently accessed sections
-  *Note: P2-1 moved cache to ThreadLocal, eliminating cross-thread thrashing. Single-entry
-  cache within a thread is still fine for sequential iteration (the common case). LRU would
-  only help random-access patterns, which are rare.*
+Added 4-entry chunk ring buffer to SectionCache. On chunk miss, the ring is checked before
+falling back to a full chunk load. Sequential iteration is unaffected (hits primary cache).
 
 ---
 
