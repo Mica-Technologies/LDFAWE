@@ -366,7 +366,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
             }
             // Set biomes — use REID's API when available, vanilla path otherwise
             if (this.biomes != null) {
-                if (!REIDBiomeHelper.applyBiomes(nmsChunk, this.biomes)) {
+                if (!REIDBiomeHelper.applyBiomes(nmsChunk, this.biomes, nmsWorld, this.getX(), this.getZ())) {
                     byte[] currentBiomes = nmsChunk.getBiomeArray();
                     for (int i = 0; i < this.biomes.length; i++) {
                         byte biome = this.biomes[i];
