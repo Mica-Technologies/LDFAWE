@@ -168,23 +168,20 @@ the correctness bugs above — they address crash prevention, throttling, and th
 
 ### P1: Queue Management & Memory
 
-### P1-1. Unbounded activeQueues accumulation
+### P1-1. Unbounded activeQueues accumulation — FIXED
 **File:** `util/SetQueue.java:210-221`
-No size limit on `activeQueues`. Hundreds of queues from rapid-fire operations pile up.
-- [ ] Add max queue count (e.g., 100), reject/defer new operations when full
+Added `MAX_ACTIVE_QUEUES` config (default 64). When the limit is reached, the oldest queue
+is force-flushed before a new one is added, providing natural back-pressure.
 
-### P1-2. MemUtil.calculateMemory() doesn't detect pressure early enough
+### P1-2. MemUtil.calculateMemory() doesn't detect pressure early enough — FIXED
 **File:** `util/MemUtil.java:39-52`
-Returns `Integer.MAX_VALUE` (all clear) while `heapSize < heapMaxSize`. The heap grows until
-full before any pressure is detected. By then it's too late for graceful abort.
-- [ ] Add early threshold: trigger slowdown at e.g. 512MB free, not at 1% free
+Replaced the `totalMemory < maxMemory` shortcut with `(maxMemory - usedBytes)` to calculate
+true free memory across the full heap capacity. Catches pressure while heap is still growing.
 
-### P1-3. FaweQueue.flush() wait loop only executes once
+### P1-3. FaweQueue.flush() wait loop only executes once — FIXED
 **File:** `object/FaweQueue.java:496-504`
-```java
-this.wait(time);  // Waits once, then loop condition may still be true but exits
-```
-- [ ] Fix loop to re-check and re-wait until actually empty or true timeout exceeded
+Now tracks a deadline and polls in 50ms intervals. Respects total timeout and detects
+completion promptly instead of sleeping the full duration each iteration.
 
 ### P2: Performance Bottlenecks
 

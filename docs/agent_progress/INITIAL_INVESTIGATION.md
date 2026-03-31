@@ -107,8 +107,8 @@ The fix uses a hybrid sparse cache approach: keep the existing `char[]` fast pat
 - [x] Implement REID-compatible biome writes via reflection-based BiomeApi bridge
 - [x] User testing confirms fix works in singleplayer
 - [x] Add client-side network sync via REID's MessageManager
+- [x] Test that client sees biome change immediately without world rejoin — CONFIRMED
 - [ ] Test on dedicated server (PENDING)
-- [ ] Test that client sees biome change immediately without world rejoin (PENDING)
 
 **Root Cause:**
 
