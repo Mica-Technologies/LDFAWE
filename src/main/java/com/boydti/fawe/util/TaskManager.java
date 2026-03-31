@@ -4,8 +4,10 @@ import com.boydti.fawe.Fawe;
 import com.boydti.fawe.config.Settings;
 import com.boydti.fawe.object.FaweQueue;
 import com.boydti.fawe.object.RunnableVal;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.List;
 import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -109,35 +111,36 @@ public abstract class TaskManager {
             }
             return;
         }
-        int numRuns = runnables.size();
-        int amountPerThread = 1 + numRuns / numThreads;
-        final Runnable[][] split = new Runnable[numThreads][amountPerThread];
-        Thread[] threads = new Thread[numThreads];
-        int i = 0;
-        int j = 0;
+        // Distribute tasks round-robin into per-thread lists
+        final List<List<Runnable>> split = new ArrayList<>(numThreads);
+        for (int t = 0; t < numThreads; t++) {
+            split.add(new ArrayList<>());
+        }
+        int idx = 0;
         for (Runnable run : runnables) {
-            split[i][j] = run;
-            if (++i >= numThreads) {
-                i = 0;
-                j++;
+            if (run != null) {
+                split.get(idx % numThreads).add(run);
+                idx++;
             }
         }
-        for (i = 0; i < threads.length; i++) {
-            final Runnable[] toRun = split[i];
+        Thread[] threads = new Thread[numThreads];
+        for (int i = 0; i < numThreads; i++) {
+            final List<Runnable> toRun = split.get(i);
+            if (toRun.isEmpty()) {
+                continue;
+            }
             Thread thread = threads[i] = new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    for (int j = 0; j < toRun.length; j++) {
-                        Runnable run = toRun[j];
-                        if (run != null) {
-                            run.run();
-                        }
+                    for (Runnable run : toRun) {
+                        run.run();
                     }
                 }
             });
             thread.start();
         }
         for (Thread thread : threads) {
+            if (thread == null) continue;
             try {
                 thread.join();
             } catch (InterruptedException e) {
