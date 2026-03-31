@@ -2,6 +2,7 @@ package com.boydti.fawe.forge.v112;
 
 import com.boydti.fawe.Fawe;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.world.World;
 import net.minecraft.world.chunk.Chunk;
 
 import java.lang.reflect.Field;
@@ -35,6 +36,9 @@ public final class REIDBiomeHelper {
     private static Method getBiomesMethod;        // getBiomes() -> int[]
     private static Method getBiomeIdMethod;       // getBiomeId(int, int) -> int
 
+    // MessageManager.sendClientsBiomeChunkChange(World, BlockPos, int[])
+    private static Method sendBiomeChunkChangeMethod;
+
     private REIDBiomeHelper() {}
 
     public static boolean isAvailable() {
@@ -58,6 +62,10 @@ public final class REIDBiomeHelper {
             Class<?> biomeAccessorClass = Class.forName("tff.reid.api.biome.BiomeAccessor");
             getBiomesMethod = biomeAccessorClass.getMethod("getBiomes");
             getBiomeIdMethod = biomeAccessorClass.getMethod("getBiomeId", int.class, int.class);
+
+            Class<?> messageManagerClass = Class.forName("org.dimdev.jeid.network.MessageManager");
+            sendBiomeChunkChangeMethod = messageManagerClass.getMethod(
+                    "sendClientsBiomeChunkChange", World.class, BlockPos.class, int[].class);
 
             available = true;
             Fawe.debug("REID detected — biome operations will use REID's extended biome API");
@@ -89,17 +97,21 @@ public final class REIDBiomeHelper {
     }
 
     /**
-     * Apply FAWE's biome changes to a chunk through REID's API.
+     * Apply FAWE's biome changes to a chunk through REID's API and notify clients.
      *
      * FAWE stores pending biome changes in a byte[256] where 0 means "no change"
      * and -1 means "set to biome 0". This method reads the chunk's current biomes
-     * from REID, overlays the changes, and writes the result back.
+     * from REID, overlays the changes, writes the result back, and sends a network
+     * packet so clients see the update without needing to rejoin.
      *
      * @param chunk      the NMS chunk to modify
      * @param faweBiomes FAWE's biome change array (byte[256], 0 = no change, -1 = biome 0)
+     * @param world      the world containing the chunk (needed for network sync)
+     * @param chunkX     chunk X coordinate (block coords = chunkX << 4)
+     * @param chunkZ     chunk Z coordinate (block coords = chunkZ << 4)
      * @return true if biomes were applied via REID, false if caller should fall back
      */
-    public static boolean applyBiomes(Chunk chunk, byte[] faweBiomes) {
+    public static boolean applyBiomes(Chunk chunk, byte[] faweBiomes, World world, int chunkX, int chunkZ) {
         if (!isAvailable()) return false;
         try {
             // Read current biomes from REID
@@ -107,19 +119,43 @@ public final class REIDBiomeHelper {
             int[] currentBiomes = (int[]) getBiomesMethod.invoke(accessor);
 
             // Overlay FAWE's changes
+            boolean anyChanged = false;
             for (int i = 0; i < faweBiomes.length && i < currentBiomes.length; i++) {
                 byte biome = faweBiomes[i];
                 if (biome != 0) {
-                    currentBiomes[i] = (biome == -1) ? 0 : (biome & 0xFF);
+                    int newId = (biome == -1) ? 0 : (biome & 0xFF);
+                    if (currentBiomes[i] != newId) {
+                        currentBiomes[i] = newId;
+                        anyChanged = true;
+                    }
                 }
             }
 
+            if (!anyChanged) return true;
+
             // Write back through REID's API
             replaceBiomesMethod.invoke(biomeApiInstance, chunk, currentBiomes);
+
+            // Send network packet so clients see the change immediately
+            sendBiomeUpdate(world, chunkX, chunkZ, currentBiomes);
+
             return true;
         } catch (Exception e) {
             Fawe.debug("REID applyBiomes failed: " + e);
             return false;
+        }
+    }
+
+    /**
+     * Send a biome chunk change packet to all clients tracking this chunk.
+     * Uses REID's MessageManager to push the updated biome data to players.
+     */
+    private static void sendBiomeUpdate(World world, int chunkX, int chunkZ, int[] biomes) {
+        try {
+            BlockPos pos = new BlockPos(chunkX << 4, 0, chunkZ << 4);
+            sendBiomeChunkChangeMethod.invoke(null, world, pos, biomes);
+        } catch (Exception e) {
+            Fawe.debug("REID sendBiomeUpdate failed: " + e);
         }
     }
 }
