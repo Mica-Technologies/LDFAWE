@@ -9,70 +9,28 @@
 
 ---
 
-## Priority 1: Critical Bugs
+## Priority 1: Critical Bugs — ALL FIXED
 
-### P1-1. FaweChunk.equals() logic inversion
-**File:** `object/FaweChunk.java:343`
-```java
-return longHash() != ((FaweChunk) obj).longHash();  // != should be ==
-```
-Breaks all HashMap/HashSet operations for chunks. Chunk deduplication silently fails.
-- [ ] Fix `!=` to `==`
+### P1-1. FaweChunk.equals() logic inversion — FIXED
+**File:** `object/FaweChunk.java:343` — Changed `!=` to `==`
 
-### P1-2. NMSRelighter bitset overflow for y > 63
-**File:** `example/NMSRelighter.java:76`
-```java
-long value = m2[y >> 6] |= 1l << y;  // Should be 1L << (y & 63)
-```
-Light updates for blocks above y=63 are lost or corrupt. The `m2` array has length 4 (covering
-y 0-255 in 64-bit longs), but the shift isn't masked, so `1L << 128` is undefined in Java (wraps
-to `1L << 0`). This means lighting at y=64 overwrites y=0's entry, y=128 overwrites y=0, etc.
-- [ ] Fix to `1L << (y & 63)`
+### P1-2. NMSRelighter bitset overflow for y > 63 — FIXED
+**File:** `example/NMSRelighter.java:76` — Changed `1l << y` to `1L << (y & 63)`
 
-### P1-3. RollbackDatabase.delete() never executes
-**File:** `database/RollbackDatabase.java:102-109`
-PreparedStatement is prepared but `stmt.executeUpdate()` is never called. Deletes silently do
-nothing. The rollback database grows unbounded.
-- [ ] Add `stmt.executeUpdate()` call
+### P1-3. RollbackDatabase.delete() never executes — FIXED
+**File:** `database/RollbackDatabase.java:105` — Added `stmt.executeUpdate()`
 
-### P1-4. DiskStorageHistory.getSizeOnDisk() wrong file references
-**File:** `object/changeset/DiskStorageHistory.java:237-259`
-Three of six file size reads reference `entfFile.length()` instead of the correct file:
-- `nbtfFile.exists()` → reads `entfFile.length()` (should be `nbtfFile`)
-- `nbttFile.exists()` → reads `entfFile.length()` (should be `nbttFile`)
-- `enttFile.exists()` → reads `entfFile.length()` (should be `enttFile`)
-- [ ] Fix all three file references
+### P1-4. DiskStorageHistory.getSizeOnDisk() wrong file references — FIXED
+**File:** `object/changeset/DiskStorageHistory.java:246-256` — Fixed all three file references
 
-### P1-5. ForgePlayer.java globally disables progress display
-**File:** `forge/ForgePlayer.java:23-30`
-```java
-public void sendTitle(String head, String sub) {
-    Settings.IMP.QUEUE.PROGRESS.DISPLAY = "false";  // Global setting!
-}
-```
-Every call to `sendTitle()` or `resetTitle()` permanently disables progress display for ALL
-players server-wide. These should be no-ops since Forge doesn't support title packets in the
-same way.
-- [ ] Remove the `Settings.IMP` mutation, make these true no-ops
+### P1-5. ForgePlayer.java globally disables progress display — FIXED
+**File:** `forge/ForgePlayer.java:23-30` — Removed `Settings.IMP` mutation, made true no-ops
 
-### P1-6. Settings.java uses Math.max() for permission limits
-**File:** `config/Settings.java:485-493`
-```java
-limit.MAX_ACTIONS = Math.max(limit.MAX_ACTIONS, newLimit.MAX_ACTIONS != -1 ? ...);
-```
-`Math.max()` means the HIGHEST (most permissive) limit wins when combining permissions.
-Should be `Math.min()` so the most restrictive limit applies.
-- [ ] Change `Math.max` to `Math.min` for all limit fields
+### P1-6. Settings.java uses Math.max() for permission limits — FIXED
+**File:** `config/Settings.java:485-493` — Changed all 9 `Math.max` to `Math.min`
 
-### P1-7. DiskStorageHistory.flush() operator precedence bug
-**File:** `object/changeset/DiskStorageHistory.java:175`
-```java
-boolean flushed = osBD != null || osBIO != null || osNBTF != null || osNBTT != null && osENTCF != null || osENTCT != null;
-```
-Due to `&&` binding tighter than `||`, this evaluates as:
-`(osBD) || (osBIO) || (osNBTF) || ((osNBTT) && (osENTCF)) || (osENTCT)`
-Should use explicit parentheses or just `||` throughout.
-- [ ] Fix operator precedence with parentheses
+### P1-7. DiskStorageHistory.flush() operator precedence bug — FIXED
+**File:** `object/changeset/DiskStorageHistory.java:175` — Changed `&& osENTCF` to `|| osENTCF`
 
 ---
 
@@ -118,10 +76,8 @@ return existing != null ? existing : new ForgePlayer(player);  // Not cached!
 Creates duplicate ForgePlayer instances, causing memory leak and session state fragmentation.
 - [ ] Register new ForgePlayer in the cache after creation
 
-### P2-6. ForgeCommand.java NPE on null FawePlayer.wrap()
-**File:** `forge/ForgeCommand.java:38`
-No null check after `FawePlayer.wrap(player)` before calling `cmd.executeSafe(fp, args)`.
-- [ ] Add null guard
+### P2-6. ForgeCommand.java NPE on null FawePlayer.wrap() — FIXED
+**File:** `forge/ForgeCommand.java:38` — Added null guard before `executeSafe()`
 
 ### P2-7. TaskManager.parallel() array sizing bug
 **File:** `util/TaskManager.java:112-114`
@@ -239,33 +195,14 @@ the correctness bugs above — they address crash prevention, throttling, and th
 
 ### P0: Server Crash / Deadlock Risks
 
-### P0-1. SetQueue.awaitQuiescence() blocks forever
-**File:** `util/SetQueue.java:174-185`
-```java
-pool.awaitQuiescence(Long.MAX_VALUE, TimeUnit.MILLISECONDS);
-```
-If any chunk processor hangs (reflection failure, world unload, etc.), the entire server thread
-deadlocks permanently.
-- [ ] Replace `Long.MAX_VALUE` with `Settings.IMP.QUEUE.DISCARD_AFTER_MS`
+### P0-1. SetQueue.awaitQuiescence() blocks forever — FIXED
+**File:** `util/SetQueue.java:177` — Replaced `Long.MAX_VALUE` with `DISCARD_AFTER_MS`
 
-### P0-2. PREVENT_CRASHES defaults to false
-**File:** `config/Settings.java:44`
-When off, FAWE uses `DefaultFaweQueueMap` with hard references — every queued chunk stays in
-memory until processed. A 100M-block operation can exhaust the heap with no safety net.
-- [ ] Change default to `true`
-- [ ] Consider always enabling for operations above a configurable block count threshold
+### P0-2. PREVENT_CRASHES defaults to false — FIXED
+**File:** `config/Settings.java:44` — Changed default to `true`
 
-### P0-3. ForgeTaskMan.onServerTick() has no time budget
-**File:** `forge/ForgeTaskMan.java:57-78`
-All sync tasks run in a single tick without checking elapsed time. If SetQueue adds thousands
-of lighting/chunk tasks, the server tick stalls for seconds.
-```java
-for (int i = 0; i < syncSize; i++) {
-    // No time check — runs ALL tasks in one tick
-    item.run();
-}
-```
-- [ ] Add time budget: `System.currentTimeMillis() - start < 40` (leave 10ms for other tick work)
+### P0-3. ForgeTaskMan.onServerTick() has no time budget — FIXED
+**File:** `forge/ForgeTaskMan.java:67-78` — Added 40ms time budget with early break
 
 ### P1: Queue Management & Memory
 
