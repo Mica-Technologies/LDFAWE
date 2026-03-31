@@ -14,6 +14,7 @@ import java.awt.*;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class FaweCache {
     /**
@@ -36,8 +37,8 @@ public class FaweCache {
      * [ i | j ] => z
      */
     private final static byte[][] CACHE_Z = new byte[16][4096];
-    private final static boolean[] CACHE_PASSTHROUGH = new boolean[65535];
-    private final static boolean[] CACHE_TRANSLUSCENT = new boolean[65535];
+    private final static boolean[] CACHE_PASSTHROUGH = new boolean[Character.MAX_VALUE + 1];
+    private final static boolean[] CACHE_TRANSLUSCENT = new boolean[Character.MAX_VALUE + 1];
     /**
      * Immutable biome cache
      */
@@ -53,6 +54,18 @@ public class FaweCache {
      */
     private final static PseudoRandom RANDOM = new PseudoRandom();
     private final static Color[] CACHE_COLOR = new Color[Character.MAX_VALUE + 1];
+
+    /**
+     * Overflow maps for block IDs > 4095 (combined index > 65535).
+     * These are lazily populated and use ConcurrentHashMap for thread safety.
+     */
+    private final static ConcurrentHashMap<Integer, BaseBlock> OVERFLOW_BLOCK = new ConcurrentHashMap<>();
+    private final static ConcurrentHashMap<Integer, BaseItem> OVERFLOW_ITEM = new ConcurrentHashMap<>();
+
+    /**
+     * The maximum combined index that fits in the fixed-size cache arrays.
+     */
+    public static final int MAX_CACHE_INDEX = Character.MAX_VALUE;
 
     static {
         for (int i = 0; i < Character.MAX_VALUE; i++) {
@@ -251,13 +264,24 @@ public class FaweCache {
     }
 
     public static final BaseBlock getBlock(int index) {
-        try {
+        if (index >= 0 && index < CACHE_BLOCK.length) {
             return CACHE_BLOCK[index];
-        } catch (ArrayIndexOutOfBoundsException e) {
-            System.out.println("[LDFAWE] INDEX OOB BUG FOR VALUE " + index);
-            MainUtil.handleError(e, false);
-            return CACHE_BLOCK[0];
         }
+        return getOverflowBlock(index);
+    }
+
+    private static BaseBlock getOverflowBlock(int index) {
+        return OVERFLOW_BLOCK.computeIfAbsent(index, i -> {
+            int id = i >> 4;
+            int data = i & 0xf;
+            if (hasNBT(id)) {
+                return new ImmutableNBTBlock(id, data);
+            } else if (hasData(id)) {
+                return new ImmutableBlock(id, data);
+            } else {
+                return new ImmutableDatalessBlock(id);
+            }
+        });
     }
 
     public static final BaseBlock[] getBlocks() {
@@ -273,7 +297,18 @@ public class FaweCache {
     }
 
     public static final BaseItem getItem(int index) {
-        return CACHE_ITEM[index];
+        if (index >= 0 && index < CACHE_ITEM.length) {
+            return CACHE_ITEM[index];
+        }
+        return getOverflowItem(index);
+    }
+
+    private static BaseItem getOverflowItem(int index) {
+        return OVERFLOW_ITEM.computeIfAbsent(index, i -> {
+            int id = i >> 4;
+            int data = i & 0xf;
+            return new BaseItem(id, (short) data);
+        });
     }
 
     /**
@@ -313,14 +348,19 @@ public class FaweCache {
     }
 
     public static final Color getColor(int id, int data) {
-        Color exact = CACHE_COLOR[getCombined(id, data)];
-        if (exact != null) {
-            return exact;
+        int combined = getCombined(id, data);
+        if (combined >= 0 && combined < CACHE_COLOR.length) {
+            Color exact = CACHE_COLOR[combined];
+            if (exact != null) {
+                return exact;
+            }
+            int baseCombined = getCombined(id, 0);
+            Color base = CACHE_COLOR[baseCombined];
+            if (base != null) {
+                return base;
+            }
         }
-        Color base = CACHE_COLOR[getCombined(id, 0)];
-        if (base != null) {
-            return base;
-        }
+        // Overflow or unknown block — return default gray
         return CACHE_COLOR[0];
     }
 
@@ -329,11 +369,21 @@ public class FaweCache {
     }
 
     public static boolean canPassThrough(int id, int data) {
-        return CACHE_PASSTHROUGH[FaweCache.getCombined(id, data)];
+        int combined = FaweCache.getCombined(id, data);
+        if (combined >= 0 && combined < CACHE_PASSTHROUGH.length) {
+            return CACHE_PASSTHROUGH[combined];
+        }
+        // Overflow: assume not passthrough (solid block) for safety
+        return false;
     }
 
     public static boolean isTranslucent(int id, int data) {
-        return CACHE_TRANSLUSCENT[FaweCache.getCombined(id, data)];
+        int combined = FaweCache.getCombined(id, data);
+        if (combined >= 0 && combined < CACHE_TRANSLUSCENT.length) {
+            return CACHE_TRANSLUSCENT[combined];
+        }
+        // Overflow: assume opaque for safety
+        return false;
     }
 
     public static boolean isLiquidOrGas(int id) {

@@ -59,12 +59,16 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
             copy = new ForgeChunk_All(getParent(), getX(), getZ(), ids, count, air, heightMap);
             copy.biomes = biomes;
             copy.chunk = chunk;
+            copy.setOverflowIds(getOverflowIds());
         } else {
             copy = new ForgeChunk_All(getParent(), getX(), getZ(), (char[][]) MainUtil.copyNd(ids), count.clone(), air.clone(), heightMap.clone());
             copy.biomes = biomes;
             copy.chunk = chunk;
             copy.biomes = biomes.clone();
             copy.chunk = chunk;
+            if (getOverflowIds() != null) {
+                copy.setOverflowIds(new java.util.HashMap<>(getOverflowIds()));
+            }
         }
         if (sectionPalettes != null) {
             copy.sectionPalettes = new BlockStateContainer[16];
@@ -122,7 +126,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
             return;
         }
         char[][] arrays = getCombinedIdArrays();
-        char lastChar = Character.MAX_VALUE;
+        HashMap<Integer, Integer> overflow = getOverflowIds();
         for (int layer = 0; layer < 16; layer++) {
             if (getCount(layer) > 0) {
                 if (sectionPalettes == null) {
@@ -133,7 +137,15 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                 for (int y = 0; y < 16; y++) {
                     for (int z = 0; z < 16; z++) {
                         for (int x = 0; x < 16; x++) {
-                            char combinedId = blocks[FaweCache.getJ(y, z, x)];
+                            int j = FaweCache.getJ(y, z, x);
+                            int combinedId = blocks[j];
+                            // Check for overflow sentinel
+                            if (combinedId == CharFaweChunk.OVERFLOW_SENTINEL && overflow != null) {
+                                Integer real = overflow.get((layer << 12) | j);
+                                if (real != null) {
+                                    combinedId = real;
+                                }
+                            }
                             if (combinedId > 1) {
                                 palette.set(x, y, z, Block.getBlockById(combinedId >> 4).getStateFromMeta(combinedId & 0xF));
                             }
@@ -310,10 +322,19 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                 int by = j << 4;
                 BlockStateContainer nibble = section.getData();
                 int nonEmptyBlockCount = 0;
+                HashMap<Integer, Integer> overflow = getOverflowIds();
                 for (int y = 0; y < 16; y++) {
                     for (int z = 0; z < 16; z++) {
                         for (int x = 0; x < 16; x++) {
-                            char combinedId = array[FaweCache.getJ(y, z, x)];
+                            int jIdx = FaweCache.getJ(y, z, x);
+                            int combinedId = array[jIdx];
+                            // Check for overflow sentinel
+                            if (combinedId == CharFaweChunk.OVERFLOW_SENTINEL && overflow != null) {
+                                Integer real = overflow.get((j << 12) | jIdx);
+                                if (real != null) {
+                                    combinedId = real;
+                                }
+                            }
                             switch (combinedId) {
                                 case 0:
                                     continue;

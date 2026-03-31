@@ -532,7 +532,17 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
                         if (combined > 1) {
                             solid++;
                         }
-                        previousLayer[j] = (char) combined;
+                        if (combined > Character.MAX_VALUE) {
+                            previousLayer[j] = CharFaweChunk.OVERFLOW_SENTINEL;
+                            previous.setBlock(
+                                FaweCache.getX(0, j),
+                                FaweCache.getY(layer, j),
+                                FaweCache.getZ(0, j),
+                                combined >> 4, combined & 0xF
+                            );
+                        } else {
+                            previousLayer[j] = (char) combined;
+                        }
                     }
                     previous.count[layer] = solid;
                     previous.air[layer] = (short) (4096 - solid);
