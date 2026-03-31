@@ -61,9 +61,9 @@ are accessed from multiple threads without synchronization.
 ### P2-6. ForgeCommand.java NPE on null FawePlayer.wrap() — FIXED
 **File:** `forge/ForgeCommand.java:38` — Added null guard before `executeSafe()`
 
-### P2-7. TaskManager.parallel() array sizing bug
-**File:** `util/TaskManager.java:112-114`
-- [ ] Fix array allocation or switch to List-based distribution (method is @Deprecated)
+### P2-7. TaskManager.parallel() array sizing bug — FIXED
+**File:** `util/TaskManager.java:112-140` — Replaced fixed 2D Runnable array with List-based
+round-robin distribution. Also added null-skip for empty thread groups in join loop.
 
 ### P2-8. DiskOptimizedClipboard close/finalize race — FIXED
 **File:** `object/clipboard/DiskOptimizedClipboard.java:304` — `close()` is now `synchronized`,
@@ -85,9 +85,11 @@ removed `finalize()` override.
 **File:** `object/HistoryExtent.java:79-85` — Replaced raw `e.printStackTrace()` with
 `MainUtil.handleError(e, false)` for proper error handling.
 
-### P3-3. MappedFaweQueue.getCachedSection() ignores chunk parameter
-**File:** `example/MappedFaweQueue.java:388`
-- [ ] Investigate if this is intentional (caller always passes lastChunk) or a bug
+### P3-3. MappedFaweQueue.getCachedSection() ignores chunk parameter — BY DESIGN
+**File:** `example/MappedFaweQueue.java:388` — The base class implementation ignores the
+`chunk` parameter, but both concrete subclasses (`ForgeQueue_All`, `MCAQueue`) override the
+method and correctly use it. 20 of 21 call sites in the base class pass `lastChunkSections`
+anyway. The one outlier (`getLocalCombinedId4Data`) is itself dead-code-like. Not harmful.
 
 ### P3-4. TaskManager.wait() timeout parameter ignored — FIXED
 **File:** `util/TaskManager.java:292-307` — Fixed typo (`timout`→`timeout`), loop now breaks
@@ -104,9 +106,10 @@ raw stack trace, `debug=true` gets formatted FAWE header with truncated trace.
 **File:** `object/clipboard/MemoryOptimizedClipboard.java:55-57` — Initialized `lastI`,
 `lastIMin`, `lastIMax` to -1 so first access always recalculates.
 
-### P3-8. DiskOptimizedClipboard.getIndex() cache not thread-safe
-**File:** `object/clipboard/DiskOptimizedClipboard.java:336-442`
-- [ ] Document single-threaded usage requirement or add synchronization
+### P3-8. DiskOptimizedClipboard.getIndex() cache not thread-safe — SAFE BY DESIGN
+**File:** `object/clipboard/DiskOptimizedClipboard.java:336-442` — Each clipboard instance is
+tied to a single player's LocalSession. All operations (copy, paste, rotate, flip) execute
+synchronously via Operations.complete*(). No concurrent access occurs in practice.
 
 ---
 
