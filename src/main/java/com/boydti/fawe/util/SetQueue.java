@@ -203,6 +203,18 @@ public class SetQueue {
         inactiveQueues.remove(queue);
         if (queue.size() > 0) {
             if (!activeQueues.contains(queue)) {
+                // Back-pressure: force-flush oldest queue if at capacity
+                int maxQueues = Settings.IMP.QUEUE.MAX_ACTIVE_QUEUES;
+                if (maxQueues > 0) {
+                    while (activeQueues.size() >= maxQueues) {
+                        FaweQueue oldest = activeQueues.poll();
+                        if (oldest != null) {
+                            flush(oldest);
+                        } else {
+                            break;
+                        }
+                    }
+                }
                 queue.optimize();
                 activeQueues.add(queue);
             }

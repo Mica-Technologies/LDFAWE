@@ -307,6 +307,14 @@ public class Settings extends Config {
         })
         public int DISCARD_AFTER_MS = 60000;
 
+        @Comment({
+                "Maximum number of active queues before back-pressure kicks in",
+                " - When this limit is reached, the oldest queue is force-flushed",
+                " - Prevents unbounded memory growth from rapid-fire operations",
+                " - Set to 0 to disable (not recommended)"
+        })
+        public int MAX_ACTIVE_QUEUES = 64;
+
         public static class PROGRESS {
             @Comment({"Display constant titles about the progress of a user's edit",
                     " - false = disabled",
