@@ -264,7 +264,7 @@ public class Settings extends Config {
                 "This should equal the number of processors you have",
                 " - Set this to 1 if you need reliable `/timings`"
         })
-        public int PARALLEL_THREADS = Math.max(1, Runtime.getRuntime().availableProcessors());
+        public int PARALLEL_THREADS = Math.max(1, Math.min(8, Runtime.getRuntime().availableProcessors()));
         @Create
         public static PROGRESS PROGRESS;
         @Comment({

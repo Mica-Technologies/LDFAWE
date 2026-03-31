@@ -20,7 +20,6 @@ public class MemUtil {
     public static boolean isMemoryLimitedSlow() {
         if (memory.get()) {
             System.gc();
-            System.gc();
             calculateMemory();
             return memory.get();
         }
@@ -65,7 +64,6 @@ public class MemUtil {
     }
 
     public static void memoryLimitedTask() {
-        System.gc();
         System.gc();
         for (Runnable task : memoryLimitedTasks) {
             task.run();
