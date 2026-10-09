@@ -73,6 +73,7 @@ import java.net.URLEncoder;
 import java.nio.file.Files;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -336,35 +337,43 @@ public class ClipboardCommands extends MethodCommands {
             // If we have a transform, bake it into the copy
             if (!transform.isIdentity()) {
                 final FlattenedClipboardTransform result = FlattenedClipboardTransform.transform(clipboard, transform, holder.getWorldData());
-                target = new BlockArrayClipboard(result.getTransformedRegion(), player.getUniqueId());
+                // A fresh id: the player's own id names the file backing their session clipboard,
+                // which is the source of this copy
+                target = new BlockArrayClipboard(result.getTransformedRegion(), UUID.randomUUID());
                 target.setOrigin(clipboard.getOrigin());
                 Operations.completeLegacy(result.copyTo(target));
             } else {
                 target = clipboard;
             }
-            switch (format) {
-                case PNG:
-                    try {
-                        FastByteArrayOutputStream baos = new FastByteArrayOutputStream(Short.MAX_VALUE);
-                        ClipboardWriter writer = format.getWriter(baos);
-                        writer.write(target, null);
-                        baos.flush();
-                        url = ImgurUtility.uploadImage(baos.toByteArray());
-                    } catch (IOException e) {
-                        e.printStackTrace();
+            try {
+                switch (format) {
+                    case PNG:
+                        try {
+                            FastByteArrayOutputStream baos = new FastByteArrayOutputStream(Short.MAX_VALUE);
+                            ClipboardWriter writer = format.getWriter(baos);
+                            writer.write(target, null);
+                            baos.flush();
+                            url = ImgurUtility.uploadImage(baos.toByteArray());
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                            url = null;
+                        }
+                        break;
+                    case SCHEMATIC:
+                        if (Settings.IMP.WEB.URL.isEmpty()) {
+                            BBC.SETTING_DISABLE.send(player, "web.url");
+                            return;
+                        }
+                        url = FaweAPI.upload(target, format);
+                        break;
+                    default:
                         url = null;
-                    }
-                    break;
-                case SCHEMATIC:
-                    if (Settings.IMP.WEB.URL.isEmpty()) {
-                        BBC.SETTING_DISABLE.send(player, "web.url");
-                        return;
-                    }
-                    url = FaweAPI.upload(target, format);
-                    break;
-                default:
-                    url = null;
-                    break;
+                        break;
+                }
+            } finally {
+                if (target != clipboard && target instanceof BlockArrayClipboard) {
+                    ((BlockArrayClipboard) target).close();
+                }
             }
         }
         if (url == null) {
@@ -410,7 +419,9 @@ public class ClipboardCommands extends MethodCommands {
         // If we have a transform, bake it into the copy
         if (!transform.isIdentity()) {
             final FlattenedClipboardTransform result = FlattenedClipboardTransform.transform(clipboard, transform, holder.getWorldData());
-            target = new BlockArrayClipboard(result.getTransformedRegion(), player.getUniqueId());
+            // A fresh id: the player's own id names the file backing their session clipboard,
+                // which is the source of this copy
+                target = new BlockArrayClipboard(result.getTransformedRegion(), UUID.randomUUID());
             target.setOrigin(clipboard.getOrigin());
             Operations.completeLegacy(result.copyTo(target));
         } else {
@@ -421,7 +432,14 @@ public class ClipboardCommands extends MethodCommands {
             BBC.SETTING_DISABLE.send(player, "web.assets");
             return;
         }
-        URL url = format.uploadPublic(target, category.replaceAll("[/|\\\\]", "."), player.getName());
+        URL url;
+        try {
+            url = format.uploadPublic(target, category.replaceAll("[/|\\\\]", "."), player.getName());
+        } finally {
+            if (target != clipboard && target instanceof BlockArrayClipboard) {
+                ((BlockArrayClipboard) target).close();
+            }
+        }
         if (url == null) {
             BBC.GENERATING_LINK_FAILED.send(player);
         } else {
