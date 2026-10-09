@@ -1,6 +1,7 @@
 package com.sk89q.worldedit.extent.transform;
 
 import com.boydti.fawe.FaweCache;
+import com.boydti.fawe.object.BlockStateRotator;
 import com.boydti.fawe.object.extent.ResettableExtent;
 import com.boydti.fawe.util.ReflectionUtils;
 import com.sk89q.jnbt.ByteTag;
@@ -22,6 +23,7 @@ import com.sk89q.worldedit.world.registry.StateValue;
 
 import javax.annotation.Nullable;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 
@@ -35,6 +37,9 @@ public class BlockTransformExtent extends ResettableExtent {
     private Transform transformInverse;
     private BaseBlock[] BLOCK_TRANSFORM;
     private BaseBlock[] BLOCK_TRANSFORM_INVERSE;
+    // Combined ids beyond the cached range (block ids above 4095), computed on first use
+    private final Map<Integer, BaseBlock> OVERFLOW_TRANSFORM = new ConcurrentHashMap<>();
+    private final Map<Integer, BaseBlock> OVERFLOW_TRANSFORM_INVERSE = new ConcurrentHashMap<>();
 
     public BlockTransformExtent(Extent parent, BlockRegistry registry) {
         this(parent, new AffineTransform(), registry);
@@ -79,6 +84,14 @@ public class BlockTransformExtent extends ResettableExtent {
         Map<String, ? extends State> states = registry.getStates(block);
 
         if (states == null) {
+            // Not in WorldEdit's bundled (vanilla) registry: let the platform turn modded blocks
+            BlockStateRotator rotator = BlockStateRotator.get();
+            if (rotator != null) {
+                int combined = rotator.transform(block.getId(), block.getData(), transform);
+                if (combined != -1) {
+                    return new BaseBlock(FaweCache.getId(combined), FaweCache.getData(combined), changedBlock.getNbtData());
+                }
+            }
             return changedBlock;
         }
 
@@ -140,6 +153,8 @@ public class BlockTransformExtent extends ResettableExtent {
     }
 
     private void cache() {
+        OVERFLOW_TRANSFORM.clear();
+        OVERFLOW_TRANSFORM_INVERSE.clear();
         BLOCK_TRANSFORM = new BaseBlock[FaweCache.getBlocksCount()];
         BLOCK_TRANSFORM_INVERSE = new BaseBlock[FaweCache.getBlocksCount()];
         for (int i = 0; i < BLOCK_TRANSFORM.length; i++) {
@@ -167,9 +182,11 @@ public class BlockTransformExtent extends ResettableExtent {
     }
 
     public final BaseBlock transformFast(BaseBlock block) {
-        BaseBlock newBlock = BLOCK_TRANSFORM[FaweCache.getCombined(block)];
+        BaseBlock newBlock = lookup(BLOCK_TRANSFORM, OVERFLOW_TRANSFORM, transform, block);
         CompoundTag tag = block.getNbtData();
         if (tag != null) {
+            // Never edit the source's tag in place: it is usually the clipboard's stored copy
+            tag = tag.createBuilder().build();
             newBlock = new BaseBlock(newBlock.getId(), newBlock.getData(), tag);
             if (tag.containsKey("Rot")) {
                 int rot = tag.asInt("Rot");
@@ -196,9 +213,11 @@ public class BlockTransformExtent extends ResettableExtent {
     }
 
     public final BaseBlock transformFastInverse(BaseBlock block) {
-        BaseBlock newBlock = BLOCK_TRANSFORM_INVERSE[FaweCache.getCombined(block)];
+        BaseBlock newBlock = lookup(BLOCK_TRANSFORM_INVERSE, OVERFLOW_TRANSFORM_INVERSE, transformInverse, block);
         CompoundTag tag = block.getNbtData();
         if (tag != null) {
+            // Never edit the source's tag in place: it is usually the clipboard's stored copy
+            tag = tag.createBuilder().build();
             newBlock = new BaseBlock(newBlock.getId(), newBlock.getData(), tag);
             if (tag.containsKey("Rot")) {
                 int rot = tag.asInt("Rot");
@@ -222,6 +241,23 @@ public class BlockTransformExtent extends ResettableExtent {
             }
         }
         return newBlock;
+    }
+
+    private BaseBlock lookup(BaseBlock[] table, Map<Integer, BaseBlock> overflow, Transform transform, BaseBlock block) {
+        int combined = FaweCache.getCombined(block);
+        if (combined >= 0 && combined < table.length) {
+            BaseBlock cached = table[combined];
+            if (cached != null) {
+                return cached;
+            }
+        }
+        BaseBlock result = overflow.get(combined);
+        if (result == null) {
+            BaseBlock plain = FaweCache.getBlock(block.getId(), block.getData());
+            result = BlockTransformExtent.transform(new BaseBlock(plain.getId(), plain.getData()), transform, registry);
+            overflow.put(combined, result);
+        }
+        return result;
     }
 
     @Override

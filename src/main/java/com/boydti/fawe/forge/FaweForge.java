@@ -1,6 +1,7 @@
 package com.boydti.fawe.forge;
 
 
+import com.boydti.fawe.object.BlockStateRotator;
 import com.boydti.fawe.Fawe;
 import com.boydti.fawe.IFawe;
 import com.boydti.fawe.forge.v112.ForgeQueue_All;
@@ -39,6 +40,7 @@ public class FaweForge implements IFawe {
         this.logger = logger;
         this.directory = directory;
         this.mod = mod;
+        BlockStateRotator.set(new ForgeBlockStateRotator());
         try {
             Fawe.set(this);
             setupInjector();
