@@ -396,13 +396,14 @@ public class HistoryCommands extends MethodCommands {
     @Command(
             aliases = {"/clearhistory", "clearhistory"},
             usage = "",
-            desc = "Clear your history",
+            desc = "Clear your history (including the copy kept on disk)",
             min = 0,
             max = 0
     )
     @CommandPermissions("worldedit.history.clear")
     public void clearHistory(Player player, LocalSession session) throws WorldEditException {
-        session.clearHistory();
+        // Delete the files too, or the cleared edits come back on the next undo
+        session.clearHistory(true);
         BBC.COMMAND_HISTORY_CLEAR.send(player);
     }
 

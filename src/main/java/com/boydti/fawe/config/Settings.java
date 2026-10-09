@@ -32,8 +32,9 @@ public class Settings extends Config {
             " - false = do not update the plugin"
     })
     public String UPDATE = "confirm";
-    @Comment("Send anonymous usage statistics")
-    public boolean METRICS = true;
+    @Comment({"Send anonymous usage statistics to bStats (upstream FAWE's account).",
+            " - Off by default in this fork"})
+    public boolean METRICS = false;
     @Comment({
             "Set true to enable WorldEdit restrictions per region (e.g. PlotSquared or WorldGuard).",
             "To be allowed to WorldEdit in a region, users need the appropriate",
