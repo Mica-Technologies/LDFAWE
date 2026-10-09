@@ -34,7 +34,7 @@ import com.sk89q.worldedit.regions.Region;
 import com.sk89q.worldedit.world.DataException;
 import com.sk89q.worldedit.world.snapshot.InvalidSnapshotException;
 import com.sk89q.worldedit.world.snapshot.Snapshot;
-import com.sk89q.worldedit.world.snapshot.SnapshotRestore;
+import com.boydti.fawe.object.schematic.FaweSnapshotRestore;
 import com.sk89q.worldedit.world.storage.ChunkStore;
 import com.sk89q.worldedit.world.storage.MissingWorldException;
 import java.io.File;
@@ -131,7 +131,8 @@ public class SnapshotUtilCommands {
 
         try {
             // Restore snapshot
-            SnapshotRestore restore = new SnapshotRestore(chunkStore, editSession, region);
+            // FAWE's restore reads extended (RoughlyEnoughIDs) chunk sections and tile entities
+            FaweSnapshotRestore restore = new FaweSnapshotRestore(chunkStore, editSession, region);
             //player.print(restore.getChunksAffected() + " chunk(s) will be loaded.");
 
             restore.restore();
