@@ -443,6 +443,18 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
         ClassInheritanceMultiMap<Entity>[] entities = (ClassInheritanceMultiMap<Entity>[]) entitiesGeneric;
         CharFaweChunk previous = (CharFaweChunk) getFaweChunk(fs.getX(), fs.getZ());
         char[][] idPrevious = previous.getCombinedIdArrays();
+        if (fs.biomes != null) {
+            // Record the biomes about to be replaced (full ids, through REID when present), so
+            // biome edits can be undone; this runs before the chunk's new biomes are applied
+            Chunk nmsChunk = (Chunk) fs.getChunk();
+            if (nmsChunk != null) {
+                int[] biomesBefore = new int[256];
+                for (int i = 0; i < 256; i++) {
+                    biomesBefore[i] = getBiome(nmsChunk, i & 15, i >> 4);
+                }
+                previous.biomes = biomesBefore;
+            }
+        }
         for (int layer = 0; layer < sections.length; layer++) {
             if (fs.getCount(layer) != 0 || all) {
                 ExtendedBlockStorage section = sections[layer];

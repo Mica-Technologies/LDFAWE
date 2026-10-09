@@ -266,7 +266,23 @@ public abstract class FaweChangeSet implements ChangeSet {
                             int bz = cz << 4;
                             synchronized (FaweChangeSet.this) {
                                 // Biome changes
-                                {
+                                if (next instanceof CharFaweChunk && previous instanceof CharFaweChunk
+                                        && ((CharFaweChunk) next).biomes != null && ((CharFaweChunk) previous).biomes != null) {
+                                    // Full biome ids (above 255 with RoughlyEnoughIDs); BIOME_UNSET = unchanged
+                                    int[] nextIds = ((CharFaweChunk) next).biomes;
+                                    int[] previousIds = ((CharFaweChunk) previous).biomes;
+                                    int index = 0;
+                                    for (int z = 0; z < 16; z++) {
+                                        int zz = bz + z;
+                                        for (int x = 0; x < 16; x++, index++) {
+                                            int idTo = nextIds[index];
+                                            int idFrom = previousIds[index];
+                                            if (idTo != CharFaweChunk.BIOME_UNSET && idFrom != CharFaweChunk.BIOME_UNSET && idFrom != idTo) {
+                                                addBiomeChange(bx + x, zz, FaweCache.getBiome(idFrom), FaweCache.getBiome(idTo));
+                                            }
+                                        }
+                                    }
+                                } else {
                                     byte[] nextBiomes = next.getBiomeArray();
                                     if (nextBiomes != null) {
                                         byte[] previousBiomes = previous.getBiomeArray();

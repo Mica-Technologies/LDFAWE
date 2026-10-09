@@ -268,6 +268,36 @@ class FaweStreamChangeSetTest {
     }
 
     @Test
+    void biomeIdsAbove255SurviveUndo() throws Exception {
+        InMemoryChangeSet set = new InMemoryChangeSet(true, false);
+        set.addBiomeChange(5, -7, new BaseBiome(300), new BaseBiome(0));
+        set.addBiomeChange(-3, 9, new BaseBiome(0), new BaseBiome(4000));
+
+        List<String> undone = undoBiomes(set.getBiomeIterator(false));
+        assertEquals(java.util.Arrays.asList("5,-7=300", "-3,9=0"), undone);
+    }
+
+    @Test
+    void legacyOneByteBiomeStreamStillDecodes() throws Exception {
+        // Written by older versions: no header, then x and z as big-endian ints and 1-byte ids
+        ByteArrayOutputStream raw = new ByteArrayOutputStream();
+        int x = 5, z = -7;
+        for (int v : new int[]{x, z}) {
+            raw.write(v >> 24);
+            raw.write(v >> 16);
+            raw.write(v >> 8);
+            raw.write(v);
+        }
+        raw.write(200);
+        raw.write(2);
+        InMemoryChangeSet set = new InMemoryChangeSet(true, false);
+        set.getBiomeOS().write(raw.toByteArray());
+
+        List<String> undone = undoBiomes(set.getBiomeIterator(false));
+        assertEquals(Collections.singletonList("5,-7=200"), undone);
+    }
+
+    @Test
     void blockBagUndoAlsoUndoesBiomes() throws Exception {
         // A biome-only edit has no block stream; inventory-mode undo must not fail on it
         InMemoryChangeSet set = new InMemoryChangeSet(true, false);

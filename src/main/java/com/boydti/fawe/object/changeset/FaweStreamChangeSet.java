@@ -415,21 +415,46 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
         }
     }
 
+    /**
+     * First four bytes of a biome stream that stores full 4-byte biome ids (RoughlyEnoughIDs allows
+     * ids above 255). Older streams have no header and start with a record whose first field is an x
+     * coordinate, which can never be Integer.MIN_VALUE, so they are still read with 1-byte ids.
+     */
+    public static final int BIOME_WIDE_IDS_MARKER = Integer.MIN_VALUE;
+
+    private boolean biomeHeaderWritten;
+
+    private static void writeIntBE(OutputStream os, int value) throws IOException {
+        os.write((byte) (value >> 24));
+        os.write((byte) (value >> 16));
+        os.write((byte) (value >> 8));
+        os.write((byte) (value));
+    }
+
+    private static int readIntBE(InputStream is) throws IOException {
+        int b1 = is.read();
+        int b2 = is.read();
+        int b3 = is.read();
+        int b4 = is.read();
+        if ((b1 | b2 | b3 | b4) < 0) {
+            throw new EOFException();
+        }
+        return (b1 << 24) + (b2 << 16) + (b3 << 8) + b4;
+    }
+
     @Override
     public void addBiomeChange(int x, int z, BaseBiome from, BaseBiome to) {
         blockSize++;
         try {
             OutputStream os = getBiomeOS();
-            os.write((byte) (x >> 24));
-            os.write((byte) (x >> 16));
-            os.write((byte) (x >> 8));
-            os.write((byte) (x));
-            os.write((byte) (z >> 24));
-            os.write((byte) (z >> 16));
-            os.write((byte) (z >> 8));
-            os.write((byte) (z));
-            os.write(from.getId());
-            os.write(to.getId());
+            if (!biomeHeaderWritten) {
+                biomeHeaderWritten = true;
+                writeIntBE(os, BIOME_WIDE_IDS_MARKER);
+            }
+            writeIntBE(os, x);
+            writeIntBE(os, z);
+            writeIntBE(os, from.getId());
+            writeIntBE(os, to.getId());
         } catch (Throwable e) {
             MainUtil.handleError(e);
         }
@@ -552,6 +577,8 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
         }
         final MutableBiomeChange change = new MutableBiomeChange();
         return new Iterator<MutableBiomeChange>() {
+            // null until the first field is read: true for the 4-byte-id format, false for legacy
+            private Boolean wide;
             private MutableBiomeChange last = read();
 
             public MutableBiomeChange read() {
@@ -559,9 +586,18 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
                     int int1 = is.read();
                     if (int1 != -1) {
                         int x = ((int1 << 24) + (is.read() << 16) + (is.read() << 8) + (is.read() << 0));
-                        int z = ((is.read() << 24) + (is.read() << 16) + (is.read() << 8) + (is.read() << 0));
-                        int from = is.read();
-                        int to = is.read();
+                        if (wide == null) {
+                            wide = x == BIOME_WIDE_IDS_MARKER;
+                            if (wide) {
+                                x = readIntBE(is);
+                            }
+                        }
+                        int z = readIntBE(is);
+                        int from = wide ? readIntBE(is) : is.read();
+                        int to = wide ? readIntBE(is) : is.read();
+                        if (from < 0 || to < 0) {
+                            throw new EOFException();
+                        }
                         change.setBiome(x, z, from, to);
                         return change;
                     }
