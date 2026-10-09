@@ -57,6 +57,7 @@ import com.sk89q.worldedit.world.registry.BiomeRegistry;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 
 import static com.sk89q.minecraft.util.commands.Logging.LogMode.REGION;
@@ -133,7 +134,8 @@ public class BiomeCommands extends MethodCommands {
     @CommandPermissions("worldedit.biome.info")
     public void biomeInfo(Player player, LocalSession session, final EditSession editSession, CommandContext args) throws WorldEditException {
         BiomeRegistry biomeRegistry = player.getWorld().getWorldData().getBiomeRegistry();
-        final int[] biomes = new int[256];
+        // Keyed by id: extended biome ids (REID) go beyond 255
+        final Map<Integer, Integer> biomes = new java.util.TreeMap<>();
         final String qualifier;
 
         int size = 0;
@@ -145,11 +147,11 @@ public class BiomeCommands extends MethodCommands {
             }
 
             BaseBiome biome = player.getWorld().getBiome(blockPosition.toVector2D());
-            biomes[biome.getId()]++;
+            biomes.merge(biome.getId(), 1, Integer::sum);
             size = 1;
         } else if (args.hasFlag('p')) {
             BaseBiome biome = player.getWorld().getBiome(player.getPosition().toVector2D());
-            biomes[biome.getId()]++;
+            biomes.merge(biome.getId(), 1, Integer::sum);
             size = 1;
         } else {
             World world = player.getWorld();
@@ -157,14 +159,14 @@ public class BiomeCommands extends MethodCommands {
 
             if (region instanceof FlatRegion) {
                 for (Vector2D pt : new Fast2DIterator(((FlatRegion) region).asFlatRegion(), editSession)) {
-                    biomes[editSession.getBiome(pt).getId()]++;
+                    biomes.merge(editSession.getBiome(pt).getId(), 1, Integer::sum);
                     size++;
                 }
             } else {
                 RegionVisitor visitor = new RegionVisitor(region, new RegionFunction() {
                     @Override
                     public boolean apply(Vector position) throws WorldEditException {
-                        biomes[editSession.getBiome(position.toVector2D()).getId()]++;
+                        biomes.merge(editSession.getBiome(position.toVector2D()).getId(), 1, Integer::sum);
                         return true;
                     }
                 }, editSession);
@@ -176,11 +178,8 @@ public class BiomeCommands extends MethodCommands {
         BBC.BIOME_LIST_HEADER.send(player, 1, 1);
 
         List<Countable<BaseBiome>> distribution = new ArrayList<>();
-        for (int i = 0; i < biomes.length; i++) {
-            int count = biomes[i];
-            if (count != 0) {
-                distribution.add(new Countable<BaseBiome>(new BaseBiome(i), count));
-            }
+        for (Map.Entry<Integer, Integer> entry : biomes.entrySet()) {
+            distribution.add(new Countable<BaseBiome>(new BaseBiome(entry.getKey()), entry.getValue()));
         }
         Collections.sort(distribution);
         for (Countable<BaseBiome> c : distribution) {
