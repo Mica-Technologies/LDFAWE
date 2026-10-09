@@ -84,3 +84,6 @@ logs/
 
 ### Claude Code ###
 .claude/
+
+# written by .github/scripts/server-smoke-test.sh when run locally
+server-smoke.log
