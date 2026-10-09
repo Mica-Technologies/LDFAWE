@@ -74,6 +74,10 @@ public class InspectBrush extends BrushTool implements DoubleActionTraceTool {
         final FawePlayer fp = FawePlayer.wrap(player);
         EditSessionBuilder editSession = new EditSessionBuilder(world).player(fp);
         RollbackDatabase db = DBHandler.IMP.getDatabase(world);
+        if (db == null) {
+            fp.sendMessage(BBC.getPrefix() + "The rollback database is unavailable on this server (see the console); it needs an SQLite JDBC driver.");
+            return false;
+        }
         final AtomicInteger count = new AtomicInteger();
         db.getPotentialEdits(null, 0, target, target, new RunnableVal<DiskStorageHistory>() {
             @Override

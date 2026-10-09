@@ -118,6 +118,10 @@ public class HistoryCommands extends MethodCommands {
                                             rollback.setDimensions(new Vector(summary.minX, 0, summary.minZ), new Vector(summary.maxX, 255, summary.maxZ));
                                             rollback.setTime(historyFile.lastModified());
                                             RollbackDatabase db = DBHandler.IMP.getDatabase(world);
+                                            if (db == null) {
+                                                player.printError("The rollback database is unavailable on this server (see the console); it needs an SQLite JDBC driver.");
+                                                return;
+                                            }
                                             db.logEdit(rollback);
                                             player.print(BBC.getPrefix() + "Logging: " + historyFile);
                                         }
@@ -179,6 +183,10 @@ public class HistoryCommands extends MethodCommands {
         Vector top = origin.add(radius, radius, radius);
         top.mutY(Math.min(255, top.getY()));
         RollbackDatabase database = DBHandler.IMP.getDatabase(world);
+        if (database == null) {
+            player.printError("The rollback database is unavailable on this server (see the console); it needs an SQLite JDBC driver.");
+            return;
+        }
         final AtomicInteger count = new AtomicInteger();
         final FawePlayer fp = FawePlayer.wrap(player);
 

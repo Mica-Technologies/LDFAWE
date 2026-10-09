@@ -146,7 +146,10 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         deleteFiles();
         if (Settings.IMP.HISTORY.USE_DATABASE) {
             RollbackDatabase db = DBHandler.IMP.getDatabase(getWorld());
-            db.delete(uuid, index);
+            // Null when the database could not be opened (e.g. no SQLite driver on Forge)
+            if (db != null) {
+                db.delete(uuid, index);
+            }
         }
     }
 
