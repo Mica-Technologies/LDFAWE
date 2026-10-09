@@ -8,7 +8,14 @@ import com.boydti.fawe.object.IntegerTrio;
 import com.boydti.fawe.util.MainUtil;
 import com.boydti.fawe.util.ReflectionUtils;
 import com.sk89q.jnbt.CompoundTag;
+import com.sk89q.jnbt.DoubleTag;
+import com.sk89q.jnbt.FloatTag;
 import com.sk89q.jnbt.IntTag;
+import com.sk89q.jnbt.ListTag;
+import com.sk89q.jnbt.NBTInputStream;
+import com.sk89q.jnbt.NBTOutputStream;
+import com.sk89q.jnbt.NamedTag;
+import com.sk89q.jnbt.StringTag;
 import com.sk89q.jnbt.Tag;
 import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.Vector;
@@ -18,6 +25,7 @@ import com.sk89q.worldedit.entity.Entity;
 import com.sk89q.worldedit.extent.Extent;
 import com.sk89q.worldedit.extent.clipboard.BlockArrayClipboard;
 import com.sk89q.worldedit.regions.CuboidRegion;
+import com.sk89q.worldedit.util.Location;
 import com.sk89q.worldedit.world.biome.BaseBiome;
 import java.io.Closeable;
 import java.io.DataInputStream;
@@ -33,11 +41,14 @@ import java.nio.ByteBuffer;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.zip.GZIPInputStream;
+import java.util.zip.GZIPOutputStream;
 
 /**
  * A clipboard with disk backed storage. (lower memory + loads on crash)
@@ -58,6 +69,11 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
 
     private final HashMap<IntegerTrio, CompoundTag> nbtMap;
     private final HashSet<ClipboardEntity> entities;
+    /**
+     * Entities read back from the {@code .nbt} sidecar. A {@link ClipboardEntity} needs the extent that
+     * owns it, which only exists once {@link #toClipboard()} has built the BlockArrayClipboard.
+     */
+    private final List<PendingEntity> pendingEntities = new ArrayList<>();
     private final File file;
 
     /**
@@ -95,6 +111,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
                 hasBiomes = true;
             }
             loadOverflow();
+            loadNbt();
             autoCloseTask();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -186,6 +203,10 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             int oz = mbb.getShort(12);
             BlockArrayClipboard clipboard = new BlockArrayClipboard(region, this);
             clipboard.setOrigin(new Vector(ox, oy, oz));
+            for (PendingEntity pending : pendingEntities) {
+                createEntity(clipboard, pending.x, pending.y, pending.z, pending.yaw, pending.pitch, pending.entity);
+            }
+            pendingEntities.clear();
             return clipboard;
         } catch (Throwable e) {
             MainUtil.handleError(e);
@@ -220,6 +241,9 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             } catch (Exception e) {
                 MainUtil.handleError(e);
             }
+            // A new clipboard reuses the file: drop the previous clipboard's sidecars along with its blocks
+            getOverflowFile().delete();
+            getNbtFile().delete();
             this.braf = new RandomAccessFile(file, "rw");
             long volume = (long) width * (long) height * (long) length * 2l + (long) HEADER_SIZE;
             braf.setLength(0);
@@ -274,6 +298,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     public void flush() {
         mbb.force();
         saveOverflow();
+        saveNbt();
     }
 
     public DiskOptimizedClipboard(int width, int height, int length) {
@@ -313,6 +338,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             if (mbb != null) {
                 mbb.force();
                 saveOverflow();
+                saveNbt();
                 fc.close();
                 braf.close();
                 file.setWritable(true);
@@ -654,6 +680,103 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             }
         } catch (IOException e) {
             MainUtil.handleError(e);
+        }
+    }
+
+    private File getNbtFile() {
+        return new File(file.getPath() + ".nbt");
+    }
+
+    /**
+     * Persist tile entities and entities to a gzipped NBT sidecar, so chests, signs and entities
+     * survive a clipboard reload from disk (only block ids live in the mapped file).
+     */
+    private void saveNbt() {
+        File nbtFile = getNbtFile();
+        if (nbtMap.isEmpty() && entities.isEmpty() && pendingEntities.isEmpty()) {
+            nbtFile.delete();
+            return;
+        }
+        List<CompoundTag> tiles = new ArrayList<>(nbtMap.size());
+        for (Map.Entry<IntegerTrio, CompoundTag> entry : nbtMap.entrySet()) {
+            IntegerTrio pos = entry.getKey();
+            Map<String, Tag> values = new HashMap<>(entry.getValue().getValue());
+            values.put("x", new IntTag(pos.x));
+            values.put("y", new IntTag(pos.y));
+            values.put("z", new IntTag(pos.z));
+            tiles.add(new CompoundTag(values));
+        }
+        List<CompoundTag> ents = new ArrayList<>(entities.size() + pendingEntities.size());
+        for (ClipboardEntity entity : entities) {
+            Location loc = entity.getLocation();
+            ents.add(writeEntity(loc.getX(), loc.getY(), loc.getZ(), loc.getYaw(), loc.getPitch(), entity.getState()));
+        }
+        for (PendingEntity pending : pendingEntities) {
+            ents.add(writeEntity(pending.x, pending.y, pending.z, pending.yaw, pending.pitch, pending.entity));
+        }
+        Map<String, Tag> root = new HashMap<>();
+        root.put("TileEntities", new ListTag(CompoundTag.class, tiles));
+        root.put("Entities", new ListTag(CompoundTag.class, ents));
+        try (NBTOutputStream nbtOut = new NBTOutputStream(new GZIPOutputStream(new FileOutputStream(nbtFile)))) {
+            nbtOut.writeNamedTag("Clipboard", new CompoundTag(root));
+        } catch (IOException e) {
+            MainUtil.handleError(e);
+        }
+    }
+
+    private static CompoundTag writeEntity(double x, double y, double z, float yaw, float pitch, BaseEntity entity) {
+        Map<String, Tag> values = new HashMap<>();
+        values.put("Id", new StringTag(entity.getTypeId()));
+        values.put("Pos", new ListTag(DoubleTag.class, Arrays.asList(new DoubleTag(x), new DoubleTag(y), new DoubleTag(z))));
+        values.put("Rotation", new ListTag(FloatTag.class, Arrays.asList(new FloatTag(yaw), new FloatTag(pitch))));
+        CompoundTag nbt = entity.getNbtData();
+        if (nbt != null) {
+            values.put("Data", nbt);
+        }
+        return new CompoundTag(values);
+    }
+
+    /**
+     * Load tile entities and entities from the NBT sidecar if it exists.
+     */
+    private void loadNbt() {
+        File nbtFile = getNbtFile();
+        if (!nbtFile.exists()) return;
+        try (NBTInputStream nbtIn = new NBTInputStream(new GZIPInputStream(new FileInputStream(nbtFile)))) {
+            NamedTag named = nbtIn.readNamedTag();
+            if (!(named.getTag() instanceof CompoundTag)) return;
+            CompoundTag root = (CompoundTag) named.getTag();
+            for (CompoundTag tile : root.getList("TileEntities", CompoundTag.class)) {
+                setTile(tile.getInt("x"), tile.getInt("y"), tile.getInt("z"), new CompoundTag(new HashMap<>(tile.getValue())));
+            }
+            for (CompoundTag ent : root.getList("Entities", CompoundTag.class)) {
+                List<DoubleTag> pos = ent.getList("Pos", DoubleTag.class);
+                List<FloatTag> rot = ent.getList("Rotation", FloatTag.class);
+                String id = ent.getString("Id");
+                if (pos.size() != 3 || id.isEmpty()) continue;
+                Tag data = ent.getValue().get("Data");
+                BaseEntity entity = data instanceof CompoundTag ? new BaseEntity(id, (CompoundTag) data) : new BaseEntity(id);
+                float yaw = rot.size() == 2 ? rot.get(0).getValue() : 0;
+                float pitch = rot.size() == 2 ? rot.get(1).getValue() : 0;
+                pendingEntities.add(new PendingEntity(pos.get(0).getValue(), pos.get(1).getValue(), pos.get(2).getValue(), yaw, pitch, entity));
+            }
+        } catch (IOException e) {
+            MainUtil.handleError(e);
+        }
+    }
+
+    private static final class PendingEntity {
+        private final double x, y, z;
+        private final float yaw, pitch;
+        private final BaseEntity entity;
+
+        private PendingEntity(double x, double y, double z, float yaw, float pitch, BaseEntity entity) {
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.yaw = yaw;
+            this.pitch = pitch;
+            this.entity = entity;
         }
     }
 
