@@ -1,9 +1,19 @@
+# Mica Technologies standard mod release workflow — canonical copy from dev-configurations
+# (minecraft-mod-workflows/template/). Every push to main publishes a pre-release; a manual
+# dispatch with release=true publishes a full release. Both are date-versioned.
+#
+# Lines marked `# ADAPT:` are the only ones a repo is expected to change. Everything else is
+# kept verbatim across the fleet so a repo stays diffable against this file. If a repo needs a
+# structural difference, list it in a "Fork deltas" comment block at the top of its copy (see
+# the README's Variants section) rather than letting it drift silently.
+#
+# The name below is load-bearing: cleanup-mod-pre-releases.yml triggers on it by name.
 name: Build Mod Release/Pre-Release (Main Branch)
 
 on:
   push:
     branches:
-      - main
+      - main    # ADAPT: the repo's default branch
       - master
   workflow_dispatch:
     inputs:
@@ -11,6 +21,11 @@ on:
         description: 'Create a full release'
         required: false
         default: 'false'
+
+# Pushes the release tag and creates/publishes the release entry. Stated explicitly because
+# repos created since 2023 default GITHUB_TOKEN to read-only.
+permissions:
+  contents: write
 
 jobs:
   assemble_release:
@@ -22,11 +37,14 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set Up JDK 17
+      # RFG runs the Gradle process on Java 21+ (compiler + mod code stay Java 8 via
+      # Jabel); older Gradle-JVM Java versions are deprecated and slated for removal.
+      # ADAPT: only for a non-RFG build (see the README's Variants section).
+      - name: Set Up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
@@ -36,8 +54,26 @@ jobs:
           calculatedSha=$(git rev-parse --short ${{ github.sha }})
           echo "COMMIT_SHORT_SHA=$calculatedSha" >> $GITHUB_ENV
 
-          # Calculate 'final' version number (YYYY.MM.DD)
-          relVersion=$(date -u +'%Y.%m.%d')
+          # Calculate 'final' version number (YYYY.MM.DD).
+          # If a release tag already exists for today, append SemVer 2.0
+          # build metadata (+N) so subsequent same-day releases stay unique
+          # without inventing a non-SemVer 4th segment.
+          baseVersion=$(date -u +'%Y.%m.%d')
+          git fetch --tags --quiet origin || true
+          relVersion="$baseVersion"
+          maxN=-1
+          if git rev-parse -q --verify "refs/tags/$baseVersion" >/dev/null 2>&1; then
+            maxN=0
+          fi
+          for existingTag in $(git tag -l "${baseVersion}+*"); do
+            suffix="${existingTag#${baseVersion}+}"
+            if [[ "$suffix" =~ ^[0-9]+$ ]] && [ "$suffix" -gt "$maxN" ]; then
+              maxN="$suffix"
+            fi
+          done
+          if [ "$maxN" -ge 0 ]; then
+            relVersion="${baseVersion}+$((maxN + 1))"
+          fi
           echo "REL_TAG=$relVersion" >> $GITHUB_ENV
 
           # Calculate 'pre-release' version number (YYYY.MM.DD-pre.hhmm.shorttz+COMMITSHORTSHA)
@@ -56,31 +92,105 @@ jobs:
           git tag "${{ env.PRE_TAG }}" "${{ github.sha }}"
           git push origin "${{ env.PRE_TAG }}"
 
+      # The mod version is STATED here rather than inferred by the build.
+      #
+      # Left alone, build.gradle's getLastTag takes the version from `git describe --abbrev=0
+      # --tags`, which answers "some tag on this commit", not "the tag being published". A
+      # dispatched release and an earlier pushed pre-release of the same commit leave BOTH tags on
+      # it, and after UTC midnight the pre-release tag sorts first: the full release then ships a
+      # jar, and a mcmod.info inside it, stamped as a pre-release. (MCMCP shipped exactly that on
+      # 2026-09-09.)
+      #
+      # buildscript.properties' modVersion is empty, and build.gradle only asks git when it is, so
+      # writing the tag into it here decides the version. `-PmodVersion` cannot do this:
+      # loadProjectProperties copies buildscript.properties over it. The edit is CI-only and never
+      # committed.
+      - name: Pin the mod version to the tag being published
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event.inputs.release }}" = "true" ]; then
+            chosen="${{ env.REL_TAG }}"
+          else
+            chosen="${{ env.PRE_TAG }}"
+          fi
+          echo "CHOSEN_TAG=$chosen" >> "$GITHUB_ENV"
+
+          sed -i "s|^modVersion =.*|modVersion = $chosen|" buildscript.properties
+          grep -n '^modVersion' buildscript.properties
+
+          # getLastTag also feeds the generated changelog, which asks git the same ambiguous
+          # question, so the other tags on this commit go too. This is NOT redundant with the
+          # pin above. Local refs only: the remote tags, and so the release history, are
+          # untouched. `|| true` is load-bearing: grep exits 1 when the chosen tag is the only
+          # one on the commit, which is the ordinary pre-release case, and `set -o pipefail`
+          # would otherwise fail the release.
+          others="$(git tag --points-at "${{ github.sha }}" | grep -vxF "$chosen" || true)"
+          if [ -n "$others" ]; then
+            echo "$others" | xargs git tag -d
+          fi
+          echo "Local tags now on this commit:"
+          git tag --points-at "${{ github.sha }}"
+
       - name: Assemble Mod with Gradle
         run: ./gradlew build -Dhttp.socketTimeout=60000 -Dhttp.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000 -Dorg.gradle.internal.http.connectionTimeout=60000
 
+      # `| tail -n 1`: these values are pasted into a filename by the steps below, so any stray
+      # stdout line corrupts the release. Gradle prints banners during project evaluation even
+      # under -q — the buildscript update check broke a CSM release exactly that way on
+      # 2026-07-27. gradle.properties disables that check at the source
+      # (systemProp.DISABLE_BUILDSCRIPT_UPDATE_CHECK = true); this is the belt-and-braces half.
       - name: Save Mod Name to GITHUB_ENV
         run: |
-          modName=$(${{github.workspace}}/gradlew -q printModName)
+          modName=$(${{github.workspace}}/gradlew -q printModName | tail -n 1 | xargs)
           echo "MOD_NAME=$modName" >> $GITHUB_ENV
 
       - name: Save Mod Version to GITHUB_ENV
         run: |
-          modVersion=$(${{github.workspace}}/gradlew -q printModVersion)
+          modVersion=$(${{github.workspace}}/gradlew -q printModVersion | tail -n 1 | xargs)
           echo "MOD_VERSION=$modVersion" >> $GITHUB_ENV
+
+      # Shape validation cannot catch a version that is well formed but simply not the one being
+      # published, so this compares against the intended value. It runs before anything is
+      # uploaded, because the version is baked into the jar and mcmod.info as well as the file
+      # name — a wrong one cannot be fixed by renaming the asset afterwards.
+      - name: Fail if the built version is not the tag being published
+        run: |
+          built="${{ env.MOD_VERSION }}"
+          chosen="${{ env.CHOSEN_TAG }}"
+          if [ "$built" != "$chosen" ]; then
+            echo "::error::Built version '$built' does not match the published tag '$chosen'. The jar, and the mcmod.info inside it, would be stamped '$built'. Refusing to publish."
+            exit 1
+          fi
+          echo "Built version matches the published tag: $built"
 
       - name: Save Mod Archive Base Name to GITHUB_ENV
         run: |
-          modArchiveBaseName=$(${{github.workspace}}/gradlew -q printArchivesBaseName)
+          modArchiveBaseName=$(${{github.workspace}}/gradlew -q printArchivesBaseName | tail -n 1 | xargs)
           echo "MOD_ARCHIVE_BASE_NAME=$modArchiveBaseName" >> $GITHUB_ENV
 
       - name: Save Minecraft Version to GITHUB_ENV
         run: |
-          minecraftVersion=$(${{github.workspace}}/gradlew -q printMinecraftVersion)
+          minecraftVersion=$(${{github.workspace}}/gradlew -q printMinecraftVersion | tail -n 1 | xargs)
           echo "MINECRAFT_VERSION=$minecraftVersion" >> $GITHUB_ENV
 
+      # RELEASE_FILES is the list, one file per line, that the upload step uploads and verifies.
+      # A repo that ships more than one jar replaces this step with the list-driven one described
+      # in the README's multi-jar variant; the upload step already handles any number of files.
       - name: Copy Assembled Mod Jar to GitHub Actions Workspace
-        run: cp ./build/libs/${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar ./
+        run: |
+          set -euo pipefail
+          jar="${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar"
+          if [ ! -f "build/libs/$jar" ]; then
+            echo "::error::build/libs/$jar was not built"
+            ls -la build/libs/ || true
+            exit 1
+          fi
+          cp "build/libs/$jar" ./
+          {
+            echo "RELEASE_FILES<<MOD_RELEASE_EOF"
+            echo "$jar"
+            echo "MOD_RELEASE_EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Calculate Hashes for the Jar
         id: calculate-hashes
@@ -94,14 +204,18 @@ jobs:
           echo "SHA256_HASH=$sha256" >> $GITHUB_ENV
           echo "CRC32_HASH=$crc32" >> $GITHUB_ENV
 
+      # Publishing is three steps: create the release as an EMPTY DRAFT here, upload and verify
+      # every file, then publish. The action only creates the entry; it is given no `files:`, for
+      # the reason on the upload step.
       - name: Create Release Entry
         if: ${{ github.event.inputs.release == 'true' && github.event.inputs.release }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.REL_TAG }}
           name: Release ${{ env.MOD_VERSION }} (${{ env.MINECRAFT_VERSION }})
+          # ADAPT: the body text, if the mod needs more (fork notices, upstream lineage, ...).
           body: |
             Release of ${{ env.MOD_NAME }}
             Mod Version: ${{ env.MOD_VERSION }}
@@ -111,20 +225,19 @@ jobs:
             SHA-256: `${{ env.SHA256_HASH }}`
             MD5: `${{ env.MD5_HASH }}`
             CRC-32: `${{ env.CRC32_HASH }}`
-          draft: false
+          draft: true
           prerelease: false
           generate_release_notes: true
-          files: |
-            ${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar
 
       - name: Create Pre-Release Entry
         if: ${{ github.event.inputs.release == 'false' || !github.event.inputs.release }}
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ env.PRE_TAG }}
           name: Pre-Release ${{ env.MOD_VERSION }} (${{ env.MINECRAFT_VERSION }})
+          # ADAPT: the body text, as above.
           body: |
             Pre-Release of ${{ env.MOD_NAME }}
             Mod Version: ${{ env.MOD_VERSION }}
@@ -134,13 +247,50 @@ jobs:
             SHA-256: `${{ env.SHA256_HASH }}`
             MD5: `${{ env.MD5_HASH }}`
             CRC-32: `${{ env.CRC32_HASH }}`
-            
-            NOTICE: This is a pre-release version of the mod and is not 
+
+            NOTICE: This is a pre-release version of the mod and is not
             guaranteed to be stable or permanently available for download/usage.
             Pre-release versions of ${{ env.MOD_NAME }} may be removed or unavailable after
             90 days from their initial release.
-          draft: false
+          # A draft with nothing attached, as above.
+          draft: true
           prerelease: true
           generate_release_notes: true
-          files: |
-            ${{ env.MOD_ARCHIVE_BASE_NAME }}-${{ env.MOD_VERSION }}.jar
+
+      # Files are uploaded by upload-release-assets.sh, not by the action: one at a time with
+      # retries, so a failure fails the step, then read back from the API, failing unless every
+      # file is on the release as an uploaded asset. It runs while the release is still a draft,
+      # so a short release is never visible to anyone.
+      #
+      # The action's own uploader works in parallel and loses files: CSM's releases on 2026-09-17
+      # came out missing a different subset of jars on each of three runs, on v2 and v3 alike.
+      # A release missing a jar is worse than no release, because launcher manifests point
+      # straight at these file names.
+      - name: Upload and verify the release assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          # $RELEASE_FILES is read from the environment rather than pasted in as an Actions
+          # expression, so a file name can never be interpreted as shell. (Never write the
+          # expression syntax itself in a comment here: Actions expands it inside run: blocks,
+          # comments included, and an empty one makes the whole workflow file invalid.)
+          mapfile -t files < <(printf '%s\n' "$RELEASE_FILES" | sed '/^$/d')
+          bash .github/scripts/upload-release-assets.sh "$CHOSEN_TAG" "${files[@]}"
+
+      # Every file is confirmed present, so publish, and check the release really left draft
+      # state: a release nobody can download is not a release.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          tag="${{ env.CHOSEN_TAG }}"
+          gh release edit "$tag" --repo "${{ github.repository }}" --draft=false
+
+          isDraft=$(gh release view "$tag" --repo "${{ github.repository }}" --json isDraft --jq '.isDraft')
+          if [ "$isDraft" != "false" ]; then
+            echo "::error::$tag is still a draft"
+            exit 1
+          fi
+          echo "==> published $tag"

@@ -1,10 +1,21 @@
+# Mica Technologies standard PR check — canonical copy from dev-configurations
+# (minecraft-mod-workflows/template/). Lines marked `# ADAPT:` are the only ones a repo is
+# expected to change.
+#
+# The job names are what branch protection matches on. Renaming one makes every PR wait
+# forever for a check that no longer reports — update the protection rule in the same change.
 name: Test Mod Build (Pull Request)
 
 on: pull_request
 
+# Superseded runs on the same PR are pointless — the server smoke test is slow.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
-  test_assemble_mod:
-    name: Test Assemble Mod
+  compile:
+    name: Compile & Unit Test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -12,14 +23,66 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set Up JDK 17
+      # RFG runs the Gradle process on Java 21+ (compiler + mod code stay Java 8 via
+      # Jabel); older Gradle-JVM Java versions are deprecated and slated for removal.
+      # ADAPT: only for a non-RFG build (see the README's Variants section).
+      - name: Set Up JDK 21
         uses: actions/setup-java@v5
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v6
 
       - name: Assemble mod with Gradle
         run: ./gradlew build -Dhttp.socketTimeout=60000 -Dhttp.connectionTimeout=60000 -Dorg.gradle.internal.http.socketTimeout=60000 -Dorg.gradle.internal.http.connectionTimeout=60000
+
+      - name: Upload unit test report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-report
+          path: build/reports/tests/test/
+          retention-days: 7
+
+  server_smoke_test:
+    name: Dedicated Server Smoke Test
+    needs: compile
+    runs-on: ubuntu-latest
+    # World gen on a cold cache is the slow part; the script has its own inner budget.
+    # ADAPT: raise both this and SMOKE_TIMEOUT for a large content mod (CSM uses 30 / 1200).
+    timeout-minutes: 25
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set Up JDK 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: 'zulu'
+          java-version: '21'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      # `./gradlew build` passing proves nothing about whether the mod can LOAD on a
+      # dedicated server: client-only classes reached from common code, a client mod
+      # declared as a hard dependency, or a Side.CLIENT packet handler touching
+      # Minecraft directly all compile cleanly and only fail at server startup.
+      # SUM shipped three such bugs at once in 2026.07.19 and took the Alto server down;
+      # all three were caught by a single `runServer`.
+      - name: Boot dedicated server and assert startup
+        run: bash .github/scripts/server-smoke-test.sh
+        env:
+          SMOKE_TIMEOUT: '900'
+
+      - name: Upload server log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-smoke-log
+          path: server-smoke.log
+          retention-days: 7

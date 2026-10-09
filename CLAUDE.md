@@ -31,11 +31,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew test
 ```
 
-**Requirements:** Java 17 (Azul Zulu Community recommended). The build system uses RetroFuturaGradle targeting JVM 8. Heap is set to `-Xmx3G` in `gradle.properties` for decompilation.
+**Requirements:** Java 21 for the Gradle process (Azul Zulu Community recommended; CI uses Zulu 21). The build system uses RetroFuturaGradle 1.4.7 on Gradle 8.9, and the mod itself compiles to JVM 8. Heap is set to `-Xmx3G` in `gradle.properties` for decompilation.
 
-**JDK Location:** The JDK is managed via IntelliJ and located at `C:\Users\<username>\.jdks\azul-17.0.18`. When running Gradle from the CLI, set `JAVA_HOME` to this path:
+**JDK Location:** The JDK is managed via IntelliJ and located under `C:\Users\<username>\.jdks\` (e.g. `azul-21.0.12.1`). When running Gradle from the CLI, set `JAVA_HOME` to this path:
 ```bash
-JAVA_HOME="C:/Users/<username>/.jdks/azul-17.0.18" ./gradlew build
+JAVA_HOME="C:/Users/<username>/.jdks/azul-21.0.12.1" ./gradlew build
 ```
 
 ## Architecture Overview

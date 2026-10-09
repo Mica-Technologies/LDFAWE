@@ -1,4 +1,4 @@
-//version: 1762213476
+//version: 1784768619
 /*
  * DO NOT CHANGE THIS FILE!
  * Also, you may replace this file at any time if there is an update available.
@@ -34,7 +34,10 @@ plugins {
     id 'eclipse'
     id 'maven-publish'
     id 'org.jetbrains.gradle.plugin.idea-ext' version '1.1.8'
-    id 'com.gtnewhorizons.retrofuturagradle' version '1.4.0'
+    // LOCAL CHANGE (re-apply after every updateBuildScript): upstream ships 1.4.0, which was
+    // removed from all public repos and now resolves only from stale local caches. 1.4.7 is the
+    // oldest version still published. See d61a2bb63.
+    id 'com.gtnewhorizons.retrofuturagradle' version '1.4.7'
     id 'net.darkhax.curseforgegradle' version '1.1.24' apply false
     id 'com.modrinth.minotaur' version '2.8.7' apply false
     id 'com.diffplug.spotless' version '6.13.0' apply false
@@ -97,6 +100,8 @@ propertyDefaultIfUnset("modrinthRelations", "")
 propertyDefaultIfUnsetWithEnvVar("curseForgeProjectId", "", "CURSEFORGE_PROJECT_ID")
 propertyDefaultIfUnset("curseForgeRelations", "")
 propertyDefaultIfUnsetWithEnvVar("releaseType", "release", "RELEASE_TYPE")
+propertyDefaultIfUnset("clientEnvironment", true)
+propertyDefaultIfUnset("serverEnvironment", true)
 propertyDefaultIfUnset("generateDefaultChangelog", false)
 propertyDefaultIfUnset("customMavenPublishUrl", "")
 propertyDefaultIfUnset("mavenArtifactGroup", getDefaultArtifactGroup())
@@ -562,7 +567,7 @@ dependencies {
 
     compileOnlyApi 'org.jetbrains:annotations:24.1.0'
     annotationProcessor 'org.jetbrains:annotations:24.1.0'
-    patchedMinecraft('net.minecraft:launchwrapper:1.12') {
+    patchedMinecraft('net.minecraft:launchwrapper:1.17.4') {
         transitive = false
     }
 
@@ -1207,6 +1212,12 @@ if (cfApiKey.isPresent() || deploymentDebug.toBoolean()) {
             mainFile.addModLoader 'Forge'
             mainFile.addJavaVersion "Java 8"
             mainFile.addGameVersion minecraftVersion
+            if (serverEnvironment.toBoolean()) {
+                mainFile.addEnvironment "Server"
+            }
+            if (clientEnvironment.toBoolean()) {
+                mainFile.addEnvironment "Client"
+            }
 
             if (curseForgeRelations.size() != 0) {
                 String[] deps = curseForgeRelations.split(';')

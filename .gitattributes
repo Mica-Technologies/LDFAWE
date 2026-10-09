@@ -1,0 +1,21 @@
+# Normalize line endings: store LF in the repo, let git decide checkout per file rules below
+* text=auto
+
+# Scripts that must keep LF (run under bash/sh even on Windows)
+*.sh text eol=lf
+gradlew text eol=lf
+
+# Windows scripts that must keep CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files — never touch line endings
+*.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.jar binary
+*.zip binary
+*.woff binary
+*.woff2 binary
