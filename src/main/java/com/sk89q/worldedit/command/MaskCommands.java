@@ -244,7 +244,7 @@ public class MaskCommands extends MethodCommands {
     )
     public Mask wall(Extent extent) {
         BlockMask blockMask = new BlockMask(extent, new BaseBlock(0));
-        return new MaskUnion(new ExistingBlockMask(extent), new WallMask(blockMask, 1, 8));
+        return new MaskIntersection(new ExistingBlockMask(extent), new WallMask(blockMask, 1, 8));
     }
 
     @Command(

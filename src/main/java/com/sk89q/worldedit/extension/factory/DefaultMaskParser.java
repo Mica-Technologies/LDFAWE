@@ -83,8 +83,8 @@ public class DefaultMaskParser extends FaweParser<Mask> {
                 } else if (dispatcher.get(command) == null) {
                     // Legacy patterns
                     char char0 = command.charAt(0);
-                    boolean charMask = input.length() > 1 && input.charAt(1) != '[';
-                    if (charMask && input.charAt(0) == '=') {
+                    boolean charMask = command.length() > 1 && command.charAt(1) != '[';
+                    if (input.length() > 1 && input.charAt(1) != '[' && input.charAt(0) == '=') {
                         return parseFromInput(char0 + "[" + input.substring(1) + "]", context);
                     }
                     if (char0 == '#') {
@@ -107,23 +107,26 @@ public class DefaultMaskParser extends FaweParser<Mask> {
                             case '%': {
                                 String value = command.substring(1) + ((entry.getValue().isEmpty()) ? "" : "[" + StringMan.join(entry.getValue(), "][") + "]");
                                 if (value.contains(":")) {
-                                    if (value.charAt(0) == ':') value.replaceFirst(":", "");
+                                    if (value.charAt(0) == ':') value = value.replaceFirst(":", "");
                                     value = value.replaceAll(":", "][");
                                 }
-                                mask = parseFromInput("#" + char0 + "[" + value + "]", context);
+                                // These shorthands are registered under the bare character, e.g. "%" for %[chance]
+                                mask = parseFromInput(char0 + "[" + value + "]", context);
                                 break;
                             }
                             case '|':
                             case '~':
                             case '<':
                             case '>':
-                            case '!':
-                                input = input.substring(input.indexOf(char0) + 1);
-                                mask = parseFromInput(char0 + "[" + input + "]", context);
+                            case '!': {
+                                // Only wrap this entry, so the other entries of a compound mask are kept
+                                String bracketed = char0 + "[" + full.substring(1) + "]";
+                                mask = parseFromInput(bracketed, context);
                                 if (actor != null) {
-                                    BBC.COMMAND_CLARIFYING_BRACKET.send(actor, char0 + "[" + input + "]");
+                                    BBC.COMMAND_CLARIFYING_BRACKET.send(actor, bracketed);
                                 }
-                                return mask;
+                                break;
+                            }
                         }
                     }
                     if (mask == null) {

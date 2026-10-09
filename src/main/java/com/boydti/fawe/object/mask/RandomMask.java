@@ -6,16 +6,19 @@ import java.util.SplittableRandom;
 
 public class RandomMask extends AbstractMask implements ResettableMask {
     private transient SplittableRandom random;
-    private final double threshold;
+    private final double chance;
 
-    public RandomMask(double threshold) {
+    /**
+     * @param chance the probability (0 to 1) that a position passes the mask
+     */
+    public RandomMask(double chance) {
         this.random = new SplittableRandom();
-        this.threshold = (threshold - 0.5) * Integer.MAX_VALUE;
+        this.chance = chance;
     }
 
     @Override
     public boolean test(Vector vector) {
-        return random.nextInt() <= threshold;
+        return random.nextDouble() < chance;
     }
 
     @Override
