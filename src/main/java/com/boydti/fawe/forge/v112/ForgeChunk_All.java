@@ -168,26 +168,20 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
             Map<BlockPos, TileEntity> tiles = nmsChunk.getTileEntityMap();
             ClassInheritanceMultiMap<Entity>[] entities = nmsChunk.getEntityLists();
 
-            // Set heightmap
-            getParent().setHeightMap(this, heightMap);
-            // Remove entities
-            for (int i = 0; i < 16; i++) {
-                int count = this.getCount(i);
-                if (count == 0) {
-                    continue;
-                } else if (count >= 4096) {
-                    ClassInheritanceMultiMap<Entity> ents = entities[i];
-                    if (ents != null && !ents.isEmpty()) {
-                        entities[i] = new ClassInheritanceMultiMap<>(Entity.class);
-                        for (Entity ent : ents) {
-                            nmsWorld.removeEntity(ent);
-                        }
-                    }
-                } else if (!getParent().getSettings().EXPERIMENTAL.KEEP_ENTITIES_IN_BLOCKS) {
+            // This runs on a queue worker thread (possibly several chunks in parallel) while the
+            // server thread waits in SetQueue. Only chunk-local state is changed here; anything
+            // that goes through the world (entity spawn/removal, tile entity creation and
+            // invalidation, heightmaps) is collected and applied in applyOnMainThread(), which
+            // the queue calls from end() on the server thread.
+            deferredEntityRemovals = null;
+            deferredTileInvalidations = null;
+            // Entities inside blocks being replaced
+            if (!getParent().getSettings().EXPERIMENTAL.KEEP_ENTITIES_IN_BLOCKS) {
+                for (int i = 0; i < 16; i++) {
+                    if (this.getCount(i) == 0) continue;
                     char[] array = this.getIdArray(i);
                     if (array == null || entities[i] == null || entities[i].isEmpty()) continue;
-                    Collection<Entity> ents = new ArrayList<>(entities[i]);
-                    for (Entity entity : ents) {
+                    for (Entity entity : entities[i]) {
                         if (entity instanceof EntityPlayer) {
                             continue;
                         }
@@ -196,7 +190,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                         int y = MathMan.roundInt(entity.posY);
                         if (y < 0 || y > 255) continue;
                         if (array[FaweCache.getJ(y, z, x)] != 0) {
-                            nmsWorld.removeEntity(entity);
+                            deferEntityRemoval(entity);
                         }
                     }
                 }
@@ -204,65 +198,19 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
             HashSet<UUID> entsToRemove = this.getEntityRemoves();
             if (!entsToRemove.isEmpty()) {
                 for (int i = 0; i < entities.length; i++) {
-                    Collection<Entity> ents = new ArrayList<>(entities[i]);
-                    for (Entity entity : ents) {
+                    for (Entity entity : entities[i]) {
                         if (entsToRemove.contains(entity.getUniqueID())) {
-                            nmsWorld.removeEntity(entity);
+                            deferEntityRemoval(entity);
                         }
                     }
                 }
             }
-            // Set entities
-            Set<UUID> createdEntities = new HashSet<>();
-            Set<CompoundTag> entitiesToSpawn = this.getEntities();
-            for (CompoundTag nativeTag : entitiesToSpawn) {
-                Map<String, Tag> entityTagMap = nativeTag.getValue();
-                StringTag idTag = (StringTag) entityTagMap.get("Id");
-                ListTag posTag = (ListTag) entityTagMap.get("Pos");
-                ListTag rotTag = (ListTag) entityTagMap.get("Rotation");
-                if (idTag == null || posTag == null || rotTag == null) {
-                    Fawe.debug("Unknown entity tag: " + nativeTag);
-                    continue;
-                }
-                double x = posTag.getDouble(0);
-                double y = posTag.getDouble(1);
-                double z = posTag.getDouble(2);
-                float yaw = rotTag.getFloat(0);
-                float pitch = rotTag.getFloat(1);
-                String id = idTag.getValue();
-                if (entityKeys == null) {
-                    entityKeys = new HashMap<>();
-                    for (ResourceLocation key : EntityList.getEntityNameList()) {
-                        String currentId = EntityList.getTranslationName(key);
-                        entityKeys.put(currentId, key);
-                        entityKeys.put(key.getPath(), key);
-                    }
-                }
-                ResourceLocation entityKey = entityKeys.get(id);
-                if (entityKey != null) {
-                    Entity entity = EntityList.createEntityByIDFromName(entityKey, nmsWorld);
-                    if (entity != null) {
-                        NBTTagCompound tag = (NBTTagCompound) ForgeQueue_All.methodFromNative.invoke(null, nativeTag);
-                        entity.readFromNBT(tag);
-                        // A pasted copy carries its source's UUID, and the world refuses to add an
-                        // entity whose UUID is already loaded. Keep the UUID otherwise (an undo
-                        // restoring a removed entity), and record the new one so undo can find it.
-                        if (nmsWorld instanceof WorldServer && ((WorldServer) nmsWorld).getEntityFromUuid(entity.getUniqueID()) != null) {
-                            UUID uuid = UUID.randomUUID();
-                            entity.setUniqueId(uuid);
-                            Map<String, Tag> mutableMap = ReflectionUtils.getMap(nativeTag.getValue());
-                            mutableMap.put("UUIDMost", new LongTag(uuid.getMostSignificantBits()));
-                            mutableMap.put("UUIDLeast", new LongTag(uuid.getLeastSignificantBits()));
-                        }
-                        entity.setPositionAndRotation(x, y, z, yaw, pitch);
-                        if (nmsWorld.spawnEntity(entity)) {
-                            createdEntities.add(entity.getUniqueID());
-                        }
-                    }
-                }
-
-            }
-            // Run change task if applicable
+            // Settle the UUIDs of entities to spawn now, before the change task records them,
+            // so the history refers to the entity that is actually spawned later.
+            assignSpawnUuids(nmsWorld);
+            // Run change task if applicable. Entities to spawn do not exist yet, so nothing
+            // created by this chunk can be mistaken for a previous entity.
+            Set<UUID> createdEntities = Collections.emptySet();
             if (getParent().getChangeTask() != null) {
                 CharFaweChunk previous = getParent().getPrevious(this, sections, tiles, entities, createdEntities, false);
                 getParent().getChangeTask().run(previous, this);
@@ -284,10 +232,9 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     }
                     int k = FaweCache.getJ(ly, lz, lx);
                     if (array[k] != 0) {
-                        synchronized (this) {
-                            iterator.remove();
-                            tile.getValue().invalidate();
-                        }
+                        iterator.remove();
+                        if (deferredTileInvalidations == null) deferredTileInvalidations = new ArrayList<>();
+                        deferredTileInvalidations.add(tile.getValue());
                     }
                 }
             }
@@ -385,9 +332,111 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     }
                 }
             }
+            sectionPalettes = null;
+        } catch (Throwable e) {
+            MainUtil.handleError(e);
+        }
+        return this;
+    }
+
+    private List<Entity> deferredEntityRemovals;
+    private List<TileEntity> deferredTileInvalidations;
+
+    private void deferEntityRemoval(Entity entity) {
+        if (deferredEntityRemovals == null) deferredEntityRemovals = new ArrayList<>();
+        deferredEntityRemovals.add(entity);
+    }
+
+    /**
+     * Give every entity to spawn a definite UUID and write it into its tag. A pasted copy
+     * carries its source's UUID, and the world refuses to add an entity whose UUID is already
+     * loaded, so such copies get a fresh one; a tag without a UUID gets one too. A UUID that
+     * is free is kept (an undo restoring a removed entity). Writing it into the tag lets the
+     * history record the UUID the spawned entity really has, so undo can find it.
+     */
+    private void assignSpawnUuids(World nmsWorld) {
+        Set<CompoundTag> entitiesToSpawn = this.getEntities();
+        if (entitiesToSpawn.isEmpty()) return;
+        for (CompoundTag nativeTag : entitiesToSpawn) {
+            Map<String, Tag> entityTagMap = nativeTag.getValue();
+            Tag most = entityTagMap.get("UUIDMost");
+            Tag least = entityTagMap.get("UUIDLeast");
+            boolean fresh = !(most instanceof LongTag) || !(least instanceof LongTag);
+            if (!fresh && nmsWorld instanceof WorldServer) {
+                UUID existing = new UUID(((LongTag) most).getValue(), ((LongTag) least).getValue());
+                fresh = ((WorldServer) nmsWorld).getEntityFromUuid(existing) != null;
+            }
+            if (fresh) {
+                UUID uuid = UUID.randomUUID();
+                Map<String, Tag> mutableMap = ReflectionUtils.getMap(entityTagMap);
+                mutableMap.put("UUIDMost", new LongTag(uuid.getMostSignificantBits()));
+                mutableMap.put("UUIDLeast", new LongTag(uuid.getLeastSignificantBits()));
+            }
+        }
+    }
+
+    /**
+     * Apply the part of this chunk's change that goes through the world rather than the
+     * chunk's own storage: invalidating replaced tile entities, removing and spawning
+     * entities, loading tile entity NBT and fixing the heightmap. Must run on the server
+     * thread, after {@link #call()}.
+     */
+    public void applyOnMainThread() {
+        net.minecraft.world.World nmsWorld = getParent().getWorld();
+        int bx = this.getX() << 4;
+        int bz = this.getZ() << 4;
+        try {
+            if (deferredTileInvalidations != null) {
+                for (TileEntity tile : deferredTileInvalidations) {
+                    tile.invalidate();
+                }
+                deferredTileInvalidations = null;
+            }
+            if (deferredEntityRemovals != null) {
+                for (Entity entity : deferredEntityRemovals) {
+                    nmsWorld.removeEntity(entity);
+                }
+                deferredEntityRemovals = null;
+            }
+            // Set entities
+            Set<CompoundTag> entitiesToSpawn = this.getEntities();
+            for (CompoundTag nativeTag : entitiesToSpawn) {
+                Map<String, Tag> entityTagMap = nativeTag.getValue();
+                StringTag idTag = (StringTag) entityTagMap.get("Id");
+                ListTag posTag = (ListTag) entityTagMap.get("Pos");
+                ListTag rotTag = (ListTag) entityTagMap.get("Rotation");
+                if (idTag == null || posTag == null || rotTag == null) {
+                    Fawe.debug("Unknown entity tag: " + nativeTag);
+                    continue;
+                }
+                double x = posTag.getDouble(0);
+                double y = posTag.getDouble(1);
+                double z = posTag.getDouble(2);
+                float yaw = rotTag.getFloat(0);
+                float pitch = rotTag.getFloat(1);
+                String id = idTag.getValue();
+                if (entityKeys == null) {
+                    entityKeys = new HashMap<>();
+                    for (ResourceLocation key : EntityList.getEntityNameList()) {
+                        String currentId = EntityList.getTranslationName(key);
+                        entityKeys.put(currentId, key);
+                        entityKeys.put(key.getPath(), key);
+                    }
+                }
+                ResourceLocation entityKey = entityKeys.get(id);
+                if (entityKey != null) {
+                    Entity entity = EntityList.createEntityByIDFromName(entityKey, nmsWorld);
+                    if (entity != null) {
+                        // The UUID was settled (and written into the tag) by assignSpawnUuids()
+                        NBTTagCompound tag = (NBTTagCompound) ForgeQueue_All.methodFromNative.invoke(null, nativeTag);
+                        entity.readFromNBT(tag);
+                        entity.setPositionAndRotation(x, y, z, yaw, pitch);
+                        nmsWorld.spawnEntity(entity);
+                    }
+                }
+            }
             // Set tiles
             Map<Short, CompoundTag> tilesToSpawn = this.getTiles();
-
             for (Map.Entry<Short, CompoundTag> entry : tilesToSpawn.entrySet()) {
                 CompoundTag nativeTag = entry.getValue();
                 short blockHash = entry.getKey();
@@ -404,10 +453,10 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     tileEntity.readFromNBT(tag); // ReadTagIntoTile
                 }
             }
-            sectionPalettes = null;
+            // Heightmap
+            getParent().setHeightMap(this, heightMap);
         } catch (Throwable e) {
             MainUtil.handleError(e);
         }
-        return this;
     }
 }

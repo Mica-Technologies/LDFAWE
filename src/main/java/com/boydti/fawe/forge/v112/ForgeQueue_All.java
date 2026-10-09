@@ -1,5 +1,6 @@
 package com.boydti.fawe.forge.v112;
 
+import com.boydti.fawe.Fawe;
 import com.boydti.fawe.FaweCache;
 import com.boydti.fawe.example.CharFaweChunk;
 import com.boydti.fawe.example.NMSMappedFaweQueue;
@@ -12,6 +13,7 @@ import com.boydti.fawe.object.visitor.FaweChunkVisitor;
 import com.boydti.fawe.util.MainUtil;
 import com.boydti.fawe.util.MathMan;
 import com.boydti.fawe.util.ReflectionUtils;
+import com.boydti.fawe.util.TaskManager;
 import com.sk89q.jnbt.CompoundTag;
 import com.sk89q.jnbt.StringTag;
 import com.sk89q.jnbt.Tag;
@@ -77,12 +79,12 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
     protected static Field fieldBiomes2;
     protected static Field fieldGenLayer1;
     protected static Field fieldGenLayer2;
-    protected static ExtendedBlockStorage emptySection;
+    private static Field fieldPrecipitationHeightMap;
+    private static Field fieldHeightMapMinimum;
     private static MutableGenLayer genLayer;
 
     static {
         try {
-            emptySection = new ExtendedBlockStorage(0, true);
             Class<?> converter = Class.forName("com.sk89q.worldedit.forge.NBTConverter");
             methodFromNative = converter.getDeclaredMethod("toNative", Tag.class);
             methodToNative = converter.getDeclaredMethod("fromNative", NBTBase.class);
@@ -110,6 +112,13 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
             fieldNonEmptyBlockCount = ObfuscationReflectionHelper.findField(ExtendedBlockStorage.class, "field_76682_b");
         } catch (Throwable e) {
             throw new RuntimeException(e);
+        }
+        try {
+            // precipitationHeightMap / heightMapMinimum
+            fieldPrecipitationHeightMap = ObfuscationReflectionHelper.findField(Chunk.class, "field_76638_b");
+            fieldHeightMapMinimum = ObfuscationReflectionHelper.findField(Chunk.class, "field_82912_p");
+        } catch (Throwable e) {
+            MainUtil.handleError(e);
         }
     }
 
@@ -224,17 +233,53 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
     }
 
     @Override
+    public void end(FaweChunk chunk) {
+        // World-level parts of the change (entities, tile entities, heightmap) are applied
+        // here, on the server thread, before the chunk is sent.
+        if (chunk instanceof ForgeChunk_All) {
+            ((ForgeChunk_All) chunk).applyOnMainThread();
+        }
+        super.end(chunk);
+    }
+
+    /**
+     * Recompute the server heightmap of an edited chunk. The edit may have lowered the
+     * surface (e.g. //set air) as well as raised it, so every column is rescanned from the
+     * top filled section down to its first light-blocking block, the way vanilla's
+     * generateSkylightMap does. heightMapMinimum is updated to match and the precipitation
+     * heightmap is reset so vanilla recomputes it lazily. Must run on the server thread.
+     */
+    @Override
     public void setHeightMap(FaweChunk chunk, byte[] heightMap) {
         Chunk forgeChunk = (Chunk) chunk.getChunk();
-        if (forgeChunk != null) {
-            int[] otherMap = forgeChunk.getHeightMap();
-            for (int i = 0; i < heightMap.length; i++) {
-                int newHeight = heightMap[i] & 0xFF;
-                int currentHeight = otherMap[i];
-                if (newHeight > currentHeight) {
-                    otherMap[i] = newHeight;
+        if (forgeChunk == null || chunk.getBitMask() == 0) {
+            return;
+        }
+        int[] map = forgeChunk.getHeightMap();
+        int top = forgeChunk.getTopFilledSegment() + 16;
+        int bx = forgeChunk.x << 4;
+        int bz = forgeChunk.z << 4;
+        int minimum = Integer.MAX_VALUE;
+        BlockPos.MutableBlockPos mpos = new BlockPos.MutableBlockPos();
+        for (int z = 0; z < 16; z++) {
+            for (int x = 0; x < 16; x++) {
+                int y = top;
+                while (y > 0 && forgeChunk.getBlockLightOpacity(mpos.setPos(bx + x, y - 1, bz + z)) == 0) {
+                    y--;
                 }
+                map[z << 4 | x] = y;
+                if (y < minimum) minimum = y;
             }
+        }
+        try {
+            if (fieldHeightMapMinimum != null) {
+                fieldHeightMapMinimum.setInt(forgeChunk, minimum);
+            }
+            if (fieldPrecipitationHeightMap != null) {
+                Arrays.fill((int[]) fieldPrecipitationHeightMap.get(forgeChunk), -999);
+            }
+        } catch (IllegalAccessException e) {
+            MainUtil.handleError(e);
         }
     }
 
@@ -495,9 +540,17 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
     }
 
     public void sendChunk(Chunk nmsChunk, int mask) {
+        if (!Fawe.isMainThread()) {
+            // Packets are built from (and temporarily patch) the live chunk storage
+            final int requestedMask = mask;
+            TaskManager.IMP.task(() -> sendChunk(nmsChunk, requestedMask));
+            return;
+        }
         if (!nmsChunk.isLoaded()) {
             return;
         }
+        ExtendedBlockStorage[] sections = nmsChunk.getBlockStorageArray();
+        boolean[] patched = null;
         try {
             ChunkPos pos = nmsChunk.getPos();
             WorldServer w = (WorldServer) nmsChunk.getWorld();
@@ -513,12 +566,15 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
                 players.add(input);
                 return false;
             });
-            boolean empty = false;
-            ExtendedBlockStorage[] sections = nmsChunk.getBlockStorageArray();
+            // A partial chunk packet skips null sections, so a section the edit emptied would
+            // keep its old blocks on the client. Put a fresh empty section in each null slot
+            // while the packets are built (on this thread only) and take it out again after.
+            boolean sky = nmsChunk.getWorld().provider.hasSkyLight();
             for (int i = 0; i < sections.length; i++) {
                 if (sections[i] == null) {
-                    sections[i] = emptySection;
-                    empty = true;
+                    if (patched == null) patched = new boolean[sections.length];
+                    sections[i] = new ExtendedBlockStorage(i << 4, sky);
+                    patched[i] = true;
                 }
             }
             if (mask == 0 || mask == 65535 && hasEntities(nmsChunk)) {
@@ -532,15 +588,16 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
             for (EntityPlayerMP player : players) {
                 player.connection.sendPacket(packet);
             }
-            if (empty) {
+        } catch (Throwable e) {
+            MainUtil.handleError(e);
+        } finally {
+            if (patched != null) {
                 for (int i = 0; i < sections.length; i++) {
-                    if (sections[i] == emptySection) {
+                    if (patched[i]) {
                         sections[i] = null;
                     }
                 }
             }
-        } catch (Throwable e) {
-            MainUtil.handleError(e);
         }
     }
 

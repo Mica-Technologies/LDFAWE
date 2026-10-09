@@ -340,27 +340,31 @@ public class NMSRelighter implements Relighter {
         }
     }
 
-    public synchronized void sendChunks() {
+    public void sendChunks() {
+        // Take the pending chunks under the lock, but send them outside it: building a chunk
+        // packet reads (and briefly patches) live chunk storage, so it always happens on the
+        // server thread, whatever LIGHTING.ASYNC says about where light is computed.
+        final Map<Long, Integer> toSend;
+        synchronized (this) {
+            if (chunksToSend.isEmpty()) {
+                return;
+            }
+            toSend = new HashMap<>(chunksToSend);
+            chunksToSend.clear();
+        }
         RunnableVal<Object> runnable = new RunnableVal<Object>() {
             @Override
             public void run(Object value) {
-                Iterator<Map.Entry<Long, Integer>> iter = chunksToSend.entrySet().iterator();
-                while (iter.hasNext()) {
-                    Map.Entry<Long, Integer> entry = iter.next();
+                for (Map.Entry<Long, Integer> entry : toSend.entrySet()) {
                     long pair = entry.getKey();
                     int bitMask = entry.getValue();
                     int x = MathMan.unpairIntX(pair);
                     int z = MathMan.unpairIntY(pair);
                     queue.sendChunk(x, z, bitMask);
-                    iter.remove();
                 }
             }
         };
-        if (Settings.IMP.LIGHTING.ASYNC) {
-            runnable.run();
-        } else {
-            TaskManager.IMP.sync(runnable);
-        }
+        TaskManager.IMP.sync(runnable);
     }
 
     private boolean isTransparent(int x, int y, int z) {
