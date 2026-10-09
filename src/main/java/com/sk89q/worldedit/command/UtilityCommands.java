@@ -866,8 +866,9 @@ public class UtilityCommands extends MethodCommands {
         }
         if (playerFolder) {
             if (listMine) {
+                File playerRoot = new File(dir, actor.getUniqueId().toString());
                 File playerDir = MainUtil.resolveRelative(new File(dir, actor.getUniqueId() + dirFilter));
-                if (playerDir.exists()) allFiles(playerDir.listFiles(), false, forEachFile);
+                if (playerDir.exists() && isInside(playerRoot, playerDir)) allFiles(playerDir.listFiles(), false, forEachFile);
             }
             if (listGlobal) {
                 File rel = MainUtil.resolveRelative(new File(dir, dirFilter));
@@ -883,17 +884,29 @@ public class UtilityCommands extends MethodCommands {
                         super.accept(f);
                     }
                 };
-                if (rel.exists()) allFiles(rel.listFiles(), false, forEachFile);
+                if (rel.exists() && isInside(dir, rel)) allFiles(rel.listFiles(), false, forEachFile);
             }
         } else {
             File rel = MainUtil.resolveRelative(new File(dir, dirFilter));
-            if (rel.exists()) allFiles(rel.listFiles(), false, forEachFile);
+            if (rel.exists() && isInside(dir, rel)) allFiles(rel.listFiles(), false, forEachFile);
         }
         if (!filters.isEmpty() && !toFilter.isEmpty()) {
             List<File> result = filter(toFilter, filters);
             for (File file : result) rootFunction.accept(file);
         }
         return page;
+    }
+
+    /**
+     * Whether a folder named by a player's "dir/" argument stays inside the folder being listed,
+     * so that "../" cannot list (and //schem show cannot write previews into) the rest of the server.
+     */
+    private static boolean isInside(File base, File file) {
+        try {
+            return MainUtil.isInSubDirectory(base, file);
+        } catch (IOException e) {
+            return false;
+        }
     }
 
     private static List<File> filter(List<File> fileList, List<String> filters) {
