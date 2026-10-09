@@ -4,6 +4,7 @@ import com.boydti.fawe.object.BlockStateRotator;
 import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.math.transform.Transform;
 import net.minecraft.block.Block;
+import net.minecraft.block.properties.IProperty;
 import net.minecraft.block.state.IBlockState;
 import net.minecraft.init.Blocks;
 import net.minecraft.util.EnumFacing;
@@ -41,7 +42,13 @@ public class ForgeBlockStateRotator extends BlockStateRotator {
             IBlockState state = block.getStateFromMeta(data);
             IBlockState turned = state.withMirror(mirror).withRotation(rotation);
             if (turned == state) {
-                return -1;
+                // Block's default withMirror/withRotation return the state unchanged, and many mods
+                // (City Super Mod among them) never override them although they keep their facing
+                // in metadata. Turn horizontal facing and axis properties directly instead.
+                turned = turnProperties(state, mirror, rotation);
+                if (turned == state) {
+                    return -1;
+                }
             }
             int meta = block.getMetaFromState(turned);
             return (id << 4) | (meta & 15);
@@ -49,6 +56,25 @@ public class ForgeBlockStateRotator extends BlockStateRotator {
             // A mod's state handling failed for this meta; leave the block as it is
             return -1;
         }
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static IBlockState turnProperties(IBlockState state, Mirror mirror, Rotation rotation) {
+        boolean quarterTurn = rotation == Rotation.CLOCKWISE_90 || rotation == Rotation.COUNTERCLOCKWISE_90;
+        IBlockState result = state;
+        for (IProperty property : state.getPropertyKeys()) {
+            Object value = state.getValue(property);
+            Object newValue = value;
+            if (value instanceof EnumFacing && ((EnumFacing) value).getAxis().isHorizontal()) {
+                newValue = rotation.rotate(mirror.mirror((EnumFacing) value));
+            } else if (value instanceof EnumFacing.Axis && quarterTurn && value != EnumFacing.Axis.Y) {
+                newValue = value == EnumFacing.Axis.X ? EnumFacing.Axis.Z : EnumFacing.Axis.X;
+            }
+            if (newValue != value && property.getAllowedValues().contains(newValue)) {
+                result = result.withProperty(property, (Comparable) newValue);
+            }
+        }
+        return result;
     }
 
     /**
