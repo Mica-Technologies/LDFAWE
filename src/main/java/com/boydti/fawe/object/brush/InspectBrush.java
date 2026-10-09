@@ -80,11 +80,15 @@ public class InspectBrush extends BrushTool implements DoubleActionTraceTool {
             public void run(DiskStorageHistory value) {
                 try {
                     Iterator<MutableFullBlockChange> iter = value.getFullBlockIterator(null, 0, false);
+                    // Read to the end even after a match: the iterator only closes the history file
+                    // once exhausted, and a file left open cannot be deleted on Windows
+                    boolean found = false;
                     while (iter.hasNext()) {
                         MutableFullBlockChange change = iter.next();
-                        if (change.x != x || change.y != y || change.z != z) {
+                        if (found || change.x != x || change.y != y || change.z != z) {
                             continue;
                         }
+                        found = true;
                         int from = change.from;
                         int to = change.to;
                         UUID uuid = value.getUUID();
@@ -94,7 +98,6 @@ public class InspectBrush extends BrushTool implements DoubleActionTraceTool {
                         String ageFormatted = MainUtil.secToTime(age / 1000);
                         BBC.TOOL_INSPECT_INFO.send(fp, name, FaweCache.getMaterialName(from), FaweCache.getMaterialName(to), ageFormatted);
                         count.incrementAndGet();
-                        return;
                     }
                 } catch (IOException e) {
                     e.printStackTrace();
