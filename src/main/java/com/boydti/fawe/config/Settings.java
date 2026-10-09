@@ -309,7 +309,7 @@ public class Settings extends Config {
 
         @Comment({
                 "Maximum number of active queues before back-pressure kicks in",
-                " - When this limit is reached, the oldest queue is force-flushed",
+                " - When this limit is reached, new edits wait (off the main thread) until the server catches up",
                 " - Prevents unbounded memory growth from rapid-fire operations",
                 " - Set to 0 to disable (not recommended)"
         })

@@ -199,28 +199,43 @@ public class SetQueue {
     }
 
     public boolean enqueue(FaweQueue queue) {
+        if (queue.size() > 0 && !activeQueues.contains(queue)) {
+            awaitActiveQueueSlot();
+        }
         queue.setStage(QueueStage.ACTIVE);
         inactiveQueues.remove(queue);
         if (queue.size() > 0) {
             if (!activeQueues.contains(queue)) {
-                // Back-pressure: force-flush oldest queue if at capacity
-                int maxQueues = Settings.IMP.QUEUE.MAX_ACTIVE_QUEUES;
-                if (maxQueues > 0) {
-                    while (activeQueues.size() >= maxQueues) {
-                        FaweQueue oldest = activeQueues.poll();
-                        if (oldest != null) {
-                            flush(oldest);
-                        } else {
-                            break;
-                        }
-                    }
-                }
                 queue.optimize();
                 activeQueues.add(queue);
             }
             return true;
         }
         return false;
+    }
+
+    /**
+     * Back-pressure for producers: once MAX_ACTIVE_QUEUES queues are waiting to be applied,
+     * make the (async) thread that wants to add another wait for the main thread to work
+     * through them. Applying a queue touches world state that only the server thread may
+     * touch, so the producer must not apply one itself. The main thread never waits here
+     * (it is the one draining the queues), and the wait is bounded by DISCARD_AFTER_MS so a
+     * stalled server cannot hang a command thread forever.
+     */
+    private void awaitActiveQueueSlot() {
+        int maxQueues = Settings.IMP.QUEUE.MAX_ACTIVE_QUEUES;
+        if (maxQueues <= 0 || activeQueues.size() < maxQueues || Fawe.isMainThread()) {
+            return;
+        }
+        long deadline = System.currentTimeMillis() + Math.max(1000, Settings.IMP.QUEUE.DISCARD_AFTER_MS);
+        while (activeQueues.size() >= maxQueues && System.currentTimeMillis() < deadline) {
+            try {
+                Thread.sleep(50);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
     }
 
     public void dequeue(FaweQueue queue) {
