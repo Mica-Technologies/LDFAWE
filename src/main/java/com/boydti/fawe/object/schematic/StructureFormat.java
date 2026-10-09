@@ -1,5 +1,6 @@
 package com.boydti.fawe.object.schematic;
 
+import com.boydti.fawe.object.BlockStateRegistry;
 import com.boydti.fawe.Fawe;
 import com.boydti.fawe.FaweCache;
 import com.boydti.fawe.util.ReflectionUtils;
@@ -81,6 +82,24 @@ public class StructureFormat implements ClipboardReader, ClipboardWriter {
                 CompoundTag compound = palette.get(i);
                 Map<String, Tag> map = compound.getValue();
                 String name = ((StringTag) map.get("Name")).getValue();
+                BlockStateRegistry registry = BlockStateRegistry.get();
+                if (registry != null) {
+                    // The platform knows every block, modded ones included, by its real state names
+                    Map<String, String> props = new HashMap<>();
+                    Tag propertiesTag = map.get("Properties");
+                    if (propertiesTag instanceof CompoundTag) {
+                        for (Map.Entry<String, Tag> property : ((CompoundTag) propertiesTag).getValue().entrySet()) {
+                            if (property.getValue() instanceof StringTag) {
+                                props.put(property.getKey(), ((StringTag) property.getValue()).getValue());
+                            }
+                        }
+                    }
+                    int combined = registry.getCombined(name, props);
+                    if (combined != -1) {
+                        combinedArray[i] = combined;
+                        continue;
+                    }
+                }
                 BundledBlockData.BlockEntry blockEntry = BundledBlockData.getInstance().findById(name);
                 if (blockEntry == null) {
                     Fawe.debug("Unknown block: " + name);
@@ -119,11 +138,10 @@ public class StructureFormat implements ClipboardReader, ClipboardWriter {
                     int id = FaweCache.getId(combined);
                     int data = FaweCache.getData(combined);
                     BaseBlock block = FaweCache.getBlock(id, data);
-                    if (FaweCache.hasNBT(id)) {
-                        CompoundTag nbt = (CompoundTag) blockMap.get("nbt");
-                        if (nbt != null) {
-                            block = new BaseBlock(id, data, nbt);
-                        }
+                    // Any stored tile entity, not only those of blocks FAWE knows to have one
+                    CompoundTag nbt = (CompoundTag) blockMap.get("nbt");
+                    if (nbt != null) {
+                        block = new BaseBlock(id, data, nbt);
                     }
                     clipboard.setBlock(posTag.getInt(0), posTag.getInt(1), posTag.getInt(2), block);
                 }
@@ -139,7 +157,11 @@ public class StructureFormat implements ClipboardReader, ClipboardWriter {
                 Map<String, Tag> entityEntryMap = entityEntry.getValue();
                 ListTag posTag = (ListTag) entityEntryMap.get("pos");
                 CompoundTag nbtTag = (CompoundTag) entityEntryMap.get("nbt");
-                String id = nbtTag.getString("Id");
+                // Vanilla writes "id"; older FAWE versions read "Id"
+                String id = nbtTag.getString("id");
+                if (id.isEmpty()) {
+                    id = nbtTag.getString("Id");
+                }
                 Location location = NBTConversions.toLocation(clipboard, posTag, nbtTag.getListTag("Rotation"));
                 if (!id.isEmpty()) {
                     BaseEntity state = new BaseEntity(id, nbtTag);
@@ -166,26 +188,39 @@ public class StructureFormat implements ClipboardReader, ClipboardWriter {
         Map<String, Object> structure = FaweCache.asMap("version", 1, "author", owner);
         // ignored: version / owner
         MutableBlockVector mutable = new MutableBlockVector(0, 0, 0);
-        int[] indexes = new int[Character.MAX_VALUE];
+        // Palette index per combined id; a map because combined ids exceed 16 bits above id 4095
+        Map<Integer, Integer> indexes = new HashMap<>();
         // Size
         structure.put("size", Arrays.asList(width, height, length));
         // Palette
         {
-            for (int i = 0; i < indexes.length; i++) {
-                indexes[i] = -1;
-            }
             ArrayList<HashMap<String, Object>> palette = new ArrayList<>();
             for (Vector point : region) {
                 BaseBlock block = clipboard.getBlock(point);
                 if (block.getId() == 217) continue; // Void
                 int combined = FaweCache.getCombined(block);
-                int index = indexes[combined];
-                if (index != -1) {
+                if (indexes.containsKey(combined)) {
                     continue;
                 }
-                indexes[combined] = palette.size();
                 HashMap<String, Object> paletteEntry = new HashMap<>();
+                BlockStateRegistry registry = BlockStateRegistry.get();
+                String registryName = registry != null ? registry.getName(block.getId()) : null;
+                if (registryName != null) {
+                    paletteEntry.put("Name", registryName);
+                    Map<String, String> properties = registry.getProperties(block.getId(), block.getData());
+                    if (properties != null && !properties.isEmpty()) {
+                        paletteEntry.put("Properties", new HashMap<String, Object>(properties));
+                    }
+                    indexes.put(combined, palette.size());
+                    palette.add(paletteEntry);
+                    continue;
+                }
                 BundledBlockData.BlockEntry blockData = BundledBlockData.getInstance().findById(block.getId());
+                if (blockData == null) {
+                    Fawe.debug("Skipping unknown block id " + block.getId() + " in structure");
+                    continue;
+                }
+                indexes.put(combined, palette.size());
                 paletteEntry.put("Name", blockData.id);
                 if (blockData.states != null && !blockData.states.isEmpty()) {
                     Map<String, Object> properties = new HashMap<>();
@@ -218,7 +253,10 @@ public class StructureFormat implements ClipboardReader, ClipboardWriter {
                 BaseBlock block = clipboard.getBlock(point);
                 if (block.getId() == 217) continue; // Void
                 int combined = FaweCache.getCombined(block);
-                int index = indexes[combined];
+                Integer index = indexes.get(combined);
+                if (index == null) {
+                    continue; // unknown block, left out of the palette
+                }
                 List<Integer> pos = Arrays.asList((int) (point.getX() - min.getX()), (int) (point.getY() - min.getY()), (int) (point.getZ() - min.getZ()));
                 if (!block.hasNbtData()) {
                     blocks.add(FaweCache.asMap("state", index, "pos", pos));
@@ -235,8 +273,13 @@ public class StructureFormat implements ClipboardReader, ClipboardWriter {
             ArrayList<Map<String, Object>> entities = new ArrayList<>();
             for (Entity entity : clipboard.getEntities()) {
                 Location loc = entity.getLocation();
-                List<Double> pos = Arrays.asList(loc.getX(), loc.getY(), loc.getZ());
-                List<Integer> blockPos = Arrays.asList(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ());
+                // Structure files store positions relative to their own origin corner
+                Vector entityMin = region.getMinimumPoint();
+                double ex = loc.getX() - entityMin.getX();
+                double ey = loc.getY() - entityMin.getY();
+                double ez = loc.getZ() - entityMin.getZ();
+                List<Double> pos = Arrays.asList(ex, ey, ez);
+                List<Integer> blockPos = Arrays.asList((int) Math.floor(ex), (int) Math.floor(ey), (int) Math.floor(ez));
                 BaseEntity state = entity.getState();
                 if (state != null) {
                     CompoundTag nbt = state.getNbtData();
