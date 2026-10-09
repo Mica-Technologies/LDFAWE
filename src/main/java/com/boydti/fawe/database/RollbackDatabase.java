@@ -66,7 +66,8 @@ public class RollbackDatabase extends AsyncNotifyQueue {
         DELETE_EDITS_USER = "DELETE FROM `" + prefix + "edits` WHERE `x2`>=? AND `x1`<=? AND `y2`>=? AND `y1`<=? AND `z2`>=? AND `z1`<=? AND `time`>? AND `player`=?";
         DELETE_EDIT_USER = "DELETE FROM `" + prefix + "edits` WHERE `player`=? AND `id`=?";
         init();
-        purge((int) TimeUnit.DAYS.toMillis(Settings.IMP.HISTORY.DELETE_AFTER_DAYS));
+        // Edit times are stored in seconds
+        purge(TimeUnit.DAYS.toSeconds(Settings.IMP.HISTORY.DELETE_AFTER_DAYS));
     }
 
 
@@ -111,7 +112,12 @@ public class RollbackDatabase extends AsyncNotifyQueue {
         });
     }
 
-    public void purge(int diff) {
+    /**
+     * Forget edits older than the given age.
+     *
+     * @param diff age in seconds
+     */
+    public void purge(long diff) {
         long now = System.currentTimeMillis() / 1000;
         final int then = (int) (now - diff);
         addTask(new Runnable() {
@@ -176,6 +182,7 @@ public class RollbackDatabase extends AsyncNotifyQueue {
                         stmt.setInt(7, (int) (minTime / 1000));
                         byte[] uuidBytes = ByteBuffer.allocate(16).putLong(uuid.getMostSignificantBits()).putLong(uuid.getLeastSignificantBits()).array();
                         stmt.setBytes(8, uuidBytes);
+                        stmt.executeUpdate();
                     } catch (SQLException e) {
                         e.printStackTrace();
                     }

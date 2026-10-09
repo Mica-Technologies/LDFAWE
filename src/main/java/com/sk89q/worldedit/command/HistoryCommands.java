@@ -28,12 +28,15 @@ import com.boydti.fawe.database.RollbackDatabase;
 import com.boydti.fawe.logging.rollback.RollbackOptimizedHistory;
 import com.boydti.fawe.object.FawePlayer;
 import com.boydti.fawe.object.FaweQueue;
+import com.boydti.fawe.object.MaskedFaweQueue;
 import com.boydti.fawe.object.RegionWrapper;
 import com.boydti.fawe.object.RunnableVal;
 import com.boydti.fawe.object.changeset.DiskStorageHistory;
 import com.boydti.fawe.regions.FaweMaskManager;
+import com.boydti.fawe.util.EditSessionBuilder;
 import com.boydti.fawe.util.MainUtil;
 import com.boydti.fawe.util.MathMan;
+import com.boydti.fawe.util.SetQueue;
 import com.sk89q.minecraft.util.commands.Command;
 import com.sk89q.minecraft.util.commands.CommandContext;
 import com.sk89q.minecraft.util.commands.CommandPermissions;
@@ -179,24 +182,29 @@ public class HistoryCommands extends MethodCommands {
         final AtomicInteger count = new AtomicInteger();
         final FawePlayer fp = FawePlayer.wrap(player);
 
-        final FaweQueue finalQueue;
         Region[] allowedRegions = fp.getCurrentRegions(FaweMaskManager.MaskType.OWNER);
         if (allowedRegions == null) {
             BBC.NO_REGION.send(fp);
             return;
         }
-        // TODO mask the regions bot / top to the bottom and top coord in the allowedRegions
-        // TODO: then mask the edit to the bot / top
-//        if (allowedRegions.length != 1 || !allowedRegions[0].isGlobal()) {
-//            finalQueue = new MaskedFaweQueue(SetQueue.IMP.getNewQueue(fp.getWorld(), true, false), allowedRegions);
-//        } else {
-//            finalQueue = SetQueue.IMP.getNewQueue(fp.getWorld(), true, false);
-//        }
+        final boolean restricted = allowedRegions.length != 1 || !allowedRegions[0].isGlobal();
         database.getPotentialEdits(other, System.currentTimeMillis() - timeDiff, bot, top, new RunnableVal<DiskStorageHistory>() {
             @Override
             public void run(DiskStorageHistory edit) {
-                if (restore) edit.redo(fp, allowedRegions);
-                else edit.undo(fp, allowedRegions);
+                if (restricted) {
+                    // Undo/redo replays changes straight onto the queue, past the EditSession's region
+                    // checks, so the queue itself is masked to the regions this player owns
+                    FaweQueue queue = new MaskedFaweQueue(SetQueue.IMP.getNewQueue(edit.getWorld(), true, false), allowedRegions);
+                    EditSession session = new EditSessionBuilder(edit.getWorld()).player(fp).queue(queue).autoQueue(false).fastmode(false)
+                            .checkMemory(false).changeSet(edit).limitUnlimited().allowedRegions(allowedRegions).build();
+                    session.setSize(1);
+                    // Only part of the edit may have been undone, so its history is kept for a wider rollback
+                    if (restore) session.redo(session);
+                    else session.undo(session);
+                } else {
+                    if (restore) edit.redo(fp, allowedRegions);
+                    else edit.undo(fp, allowedRegions);
+                }
                 BBC.ROLLBACK_ELEMENT.send(player, Fawe.imp().getWorldName(edit.getWorld()) + "/" + user + "-" + edit.getIndex());
                 count.incrementAndGet();
             }
@@ -205,7 +213,9 @@ public class HistoryCommands extends MethodCommands {
                 public void run() {
                     BBC.TOOL_INSPECT_INFO_FOOTER.send(player, count);
                 }
-            }, true, restore);
+                // Forget the edits only once their history files are gone (a full rollback); a restore
+                // or a rollback limited to owned regions keeps them so they can be rolled back again
+            }, !restore && !restricted, restore);
     }
 
     @Command(
