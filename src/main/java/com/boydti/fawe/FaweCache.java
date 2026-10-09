@@ -365,6 +365,10 @@ public class FaweCache {
     }
 
     public static final BaseBiome getBiome(int id) {
+        if (id < 0 || id >= CACHE_BIOME.length) {
+            // Extended biome ids (e.g. REID) are not cached
+            return new BaseBiome(id);
+        }
         return CACHE_BIOME[id];
     }
 

@@ -315,7 +315,15 @@ public abstract class FaweChunk<T> implements Callable<FaweChunk> {
     public abstract CompoundTag getTile(int x, int y, int z);
 
     public void setBiome(final int x, final int z, final BaseBiome biome) {
-        setBiome(x, z, (byte) biome.getId());
+        setBiome(x, z, biome.getId());
+    }
+
+    /**
+     * Set the biome at a column from its full id. Chunks that can only hold vanilla biome ids
+     * (0-255) keep the low byte; chunks that can hold more (e.g. for REID) override this.
+     */
+    public void setBiome(final int x, final int z, final int biomeId) {
+        setBiome(x, z, (byte) biomeId);
     }
 
     public abstract void setBiome(final int x, final int z, final byte biome);

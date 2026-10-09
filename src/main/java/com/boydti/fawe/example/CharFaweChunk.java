@@ -28,7 +28,12 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
     public final short[] air;
     public final byte[] heightMap;
 
-    public byte[] biomes;
+    /**
+     * Pending biome ids per column (index z << 4 | x), or null if no biome is set. Full ids,
+     * so ids above 255 (REID) survive; {@link #BIOME_UNSET} marks columns left unchanged.
+     */
+    public int[] biomes;
+    public static final int BIOME_UNSET = -1;
     public HashMap<Short, CompoundTag> tiles;
     public HashSet<CompoundTag> entities;
     public HashSet<UUID> entityRemoves;
@@ -152,9 +157,22 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
         return this.ids;
     }
 
+    /**
+     * Legacy byte view of the pending biomes: 0 = unchanged, -1 = biome 0, otherwise the low
+     * byte of the id. Lossy for ids above 254; use {@link #biomes} where possible.
+     */
     @Override
     public byte[] getBiomeArray() {
-        return this.biomes;
+        int[] ids = this.biomes;
+        if (ids == null) {
+            return null;
+        }
+        byte[] legacy = new byte[ids.length];
+        for (int i = 0; i < ids.length; i++) {
+            int id = ids[i];
+            legacy[i] = id == BIOME_UNSET ? 0 : id == 0 ? (byte) -1 : (byte) id;
+        }
+        return legacy;
     }
 
     @Override
@@ -449,11 +467,21 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
 
     @Override
     public void setBiome(final int x, final int z, byte biome) {
-        if (this.biomes == null) {
-            this.biomes = new byte[256];
+        setBiome(x, z, biome & 0xFF);
+    }
+
+    @Override
+    public void setBiome(final int x, final int z, final int biomeId) {
+        if (biomeId < 0) {
+            return;
         }
-        if (biome == 0) biome = -1;
-        biomes[((z & 15) << 4) + (x & 15)] = biome;
+        int[] ids = this.biomes;
+        if (ids == null) {
+            ids = new int[256];
+            java.util.Arrays.fill(ids, BIOME_UNSET);
+            this.biomes = ids;
+        }
+        ids[((z & 15) << 4) + (x & 15)] = biomeId;
     }
 
     @Override

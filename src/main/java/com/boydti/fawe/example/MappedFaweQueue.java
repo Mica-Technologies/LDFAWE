@@ -666,7 +666,7 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
     public int getBiomeId(int x, int z) throws FaweException.FaweChunkLoadException {
         CHUNK chunk = ensureChunkCached(x >> 4, z >> 4);
         if (chunk == null) return 0;
-        return getBiome(chunk, x, z) & 0xFF;
+        return getBiome(chunk, x, z);
     }
 
     @Override

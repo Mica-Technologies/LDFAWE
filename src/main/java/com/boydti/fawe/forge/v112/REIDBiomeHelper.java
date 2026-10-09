@@ -99,19 +99,19 @@ public final class REIDBiomeHelper {
     /**
      * Apply FAWE's biome changes to a chunk through REID's API and notify clients.
      *
-     * FAWE stores pending biome changes in a byte[256] where 0 means "no change"
-     * and -1 means "set to biome 0". This method reads the chunk's current biomes
+     * FAWE stores pending biome changes as full ids in an int[256], where
+     * {@link com.boydti.fawe.example.CharFaweChunk#BIOME_UNSET} means "no change". This method reads the chunk's current biomes
      * from REID, overlays the changes, writes the result back, and sends a network
      * packet so clients see the update without needing to rejoin.
      *
      * @param chunk      the NMS chunk to modify
-     * @param faweBiomes FAWE's biome change array (byte[256], 0 = no change, -1 = biome 0)
+     * @param faweBiomes FAWE's biome change array (int[256], BIOME_UNSET = no change)
      * @param world      the world containing the chunk (needed for network sync)
      * @param chunkX     chunk X coordinate (block coords = chunkX << 4)
      * @param chunkZ     chunk Z coordinate (block coords = chunkZ << 4)
      * @return true if biomes were applied via REID, false if caller should fall back
      */
-    public static boolean applyBiomes(Chunk chunk, byte[] faweBiomes, World world, int chunkX, int chunkZ) {
+    public static boolean applyBiomes(Chunk chunk, int[] faweBiomes, World world, int chunkX, int chunkZ) {
         if (!isAvailable()) return false;
         try {
             // Read current biomes from REID
@@ -121,9 +121,8 @@ public final class REIDBiomeHelper {
             // Overlay FAWE's changes
             boolean anyChanged = false;
             for (int i = 0; i < faweBiomes.length && i < currentBiomes.length; i++) {
-                byte biome = faweBiomes[i];
-                if (biome != 0) {
-                    int newId = (biome == -1) ? 0 : (biome & 0xFF);
+                int newId = faweBiomes[i];
+                if (newId != com.boydti.fawe.example.CharFaweChunk.BIOME_UNSET) {
                     if (currentBiomes[i] != newId) {
                         currentBiomes[i] = newId;
                         anyChanged = true;
