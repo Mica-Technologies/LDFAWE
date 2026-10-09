@@ -79,15 +79,10 @@ public class HistoryExtent extends AbstractDelegateExtent {
                 MainUtil.handleError(e, false);
             }
         }
-        // Set the block first
-        boolean result;
-        try {
-            result = getExtent().setBlock(x, y, z, block);
-        } catch (FaweException ignore) {
-            return false;
-        }
-        if (!result) return false;
-        // Record to history only after a successful set
+        // Record before placing. For inventory-mode sessions the change set is a
+        // BlockBagChangeSet, which takes the item from the player here and throws
+        // FaweBlockBagException when they do not have it: the block must then not
+        // be placed.
         try {
             if (!hadNBT) {
                 if (block.canStoreNBTData()) {
@@ -101,10 +96,9 @@ public class HistoryExtent extends AbstractDelegateExtent {
                 this.changeSet.add(x, y, z, combined, block);
             }
         } catch (FaweException ignore) {
-            // Block was set but history recording failed (e.g., BlockBag exception).
-            // The block change stands — this matches entity create/remove behavior.
+            return false;
         }
-        return true;
+        return getExtent().setBlock(x, y, z, block);
     }
 
     @Override
