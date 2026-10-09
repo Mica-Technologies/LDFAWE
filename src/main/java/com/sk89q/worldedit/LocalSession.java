@@ -341,6 +341,22 @@ public class LocalSession implements TextureHolder {
      * Clear history.
      */
     public void clearHistory() {
+        clearHistory(false);
+    }
+
+    /**
+     * Clear history.
+     *
+     * @param deleteFromDisk also delete the history files, without which history kept on disk is
+     *                       loaded back the next time it is needed (e.g. on the next undo)
+     */
+    public synchronized void clearHistory(boolean deleteFromDisk) {
+        if (deleteFromDisk) {
+            for (Object item : history) {
+                FaweChangeSet changeSet = item instanceof FaweChangeSet ? (FaweChangeSet) item : getChangeSet(item);
+                if (changeSet != null) changeSet.delete();
+            }
+        }
         history.clear();
         historyNegativeIndex = 0;
         historySize = 0;
@@ -400,6 +416,8 @@ public class LocalSession implements TextureHolder {
                         oldChangeSet = getChangeSet(item);
                     }
                     historySize -= MainUtil.getSize(oldChangeSet);
+                    // Discarded redo steps must go from disk too, or they come back on the next history load
+                    if (oldChangeSet != null) oldChangeSet.delete();
                     iter.remove();
                 }
             }
@@ -459,6 +477,8 @@ public class LocalSession implements TextureHolder {
                         oldChangeSet = getChangeSet(item);
                     }
                     historySize -= MainUtil.getSize(oldChangeSet);
+                    // Discarded redo steps must go from disk too, or they come back on the next history load
+                    if (oldChangeSet != null) oldChangeSet.delete();
                     iter.remove();
                 }
             }

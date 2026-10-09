@@ -138,6 +138,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         nbttFile.delete();
         entfFile.delete();
         enttFile.delete();
+        bioFile.delete();
     }
 
     public void undo(FawePlayer fp, Region[] regions) {
