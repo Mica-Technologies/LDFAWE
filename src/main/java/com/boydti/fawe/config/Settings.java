@@ -40,8 +40,11 @@ public class Settings extends Config {
             "fawe.<plugin>  permission. See the Permissions page for supported region plugins."
     })
     public boolean REGION_RESTRICTIONS = true;
-    @Comment("FAWE will skip chunks when there's not enough memory available")
-    public boolean PREVENT_CRASHES = true;
+    @Comment({
+            "FAWE will skip chunks when there's not enough memory available",
+            " - Skipped chunks are left unedited and are missing from the edit's history",
+    })
+    public boolean PREVENT_CRASHES = false;
     @Comment({
             "FAWE will cancel non admin edits when memory consumption exceeds this %",
             " - Bypass with `/wea` or `//fast` or `fawe.bypass`",

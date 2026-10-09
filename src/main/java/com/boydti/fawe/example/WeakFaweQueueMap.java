@@ -1,6 +1,11 @@
 package com.boydti.fawe.example;
 
-import com.boydti.fawe.Fawe;
+import com.boydti.fawe.config.BBC;
+import com.boydti.fawe.object.FawePlayer;
+import com.boydti.fawe.util.MainUtil;
+import com.sk89q.worldedit.EditSession;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.logging.log4j.LogManager;
 import com.boydti.fawe.object.FaweChunk;
 import com.boydti.fawe.object.FaweQueue;
 import com.boydti.fawe.object.RunnableVal;
@@ -58,7 +63,7 @@ public class WeakFaweQueueMap implements IFaweQueueMap {
                 if (value != null) {
                     set.add(value);
                 } else {
-                    Fawe.debug("Skipped modifying chunk due to low memory (1)");
+                    chunkLost();
                     iter.remove();
                 }
             }
@@ -76,7 +81,7 @@ public class WeakFaweQueueMap implements IFaweQueueMap {
                 if (value != null) {
                     onEach.run(value);
                 } else {
-                    Fawe.debug("Skipped modifying chunk due to low memory (2)");
+                    chunkLost();
                     iter.remove();
                 }
             }
@@ -92,6 +97,10 @@ public class WeakFaweQueueMap implements IFaweQueueMap {
         Reference<FaweChunk> chunkReference = this.blocks.get(pair);
         FaweChunk chunk;
         if (chunkReference == null || (chunk = chunkReference.get()) == null) {
+            if (chunkReference != null) {
+                // The pending changes for this chunk were collected; continuing starts it over
+                chunkLost();
+            }
             chunk = this.getNewFaweChunk(cx, cz);
             Reference<FaweChunk> previous = this.blocks.put(pair, new SoftReference(chunk));
             if (previous != null) {
@@ -143,6 +152,32 @@ public class WeakFaweQueueMap implements IFaweQueueMap {
         return blocks.size();
     }
 
+    private final AtomicInteger lostChunks = new AtomicInteger();
+
+    /**
+     * A queued chunk was reclaimed by the garbage collector before it was applied, so part of
+     * the edit is silently missing from the world and from its history. Tell the console and
+     * the players whose edits use this queue (once per queue), so the loss is not invisible.
+     */
+    private void chunkLost() {
+        if (lostChunks.getAndIncrement() != 0) {
+            return;
+        }
+        String message = "Server ran low on memory: part of an edit in " + parent.getWorldName()
+                + " was skipped and will not be undoable (PREVENT_CRASHES is enabled)";
+        LogManager.getLogger("FAWE").warn(message);
+        try {
+            for (Object session : parent.getEditSessions()) {
+                FawePlayer player = ((EditSession) session).getPlayer();
+                if (player != null) {
+                    player.sendMessage(BBC.getPrefix() + message);
+                }
+            }
+        } catch (Throwable e) {
+            MainUtil.handleError(e);
+        }
+    }
+
     private FaweChunk getNewFaweChunk(int cx, int cz) {
         return parent.getFaweChunk(cx, cz);
     }
@@ -174,7 +209,7 @@ public class WeakFaweQueueMap implements IFaweQueueMap {
                                 chunk.call();
                                 parent.end(chunk);
                             } else {
-                                Fawe.debug("Skipped modifying chunk due to low memory (3)");
+                                chunkLost();
                             }
                         } else {
                             break;
@@ -200,7 +235,7 @@ public class WeakFaweQueueMap implements IFaweQueueMap {
                         added++;
                         i++;
                     } else {
-                        Fawe.debug("Skipped modifying chunk due to low memory (4)");
+                        chunkLost();
                     }
                 }
                 // if result, then submitted = amount
