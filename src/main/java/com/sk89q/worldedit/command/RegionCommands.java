@@ -19,6 +19,9 @@
 
 package com.sk89q.worldedit.command;
 
+import java.util.Map;
+import com.boydti.fawe.FaweCache;
+import com.boydti.fawe.object.BlockStateRegistry;
 import com.boydti.fawe.FaweAPI;
 import com.boydti.fawe.config.BBC;
 import com.boydti.fawe.example.NMSMappedFaweQueue;
@@ -292,13 +295,20 @@ public class RegionCommands extends MethodCommands {
             aliases = {"/replace", "/re", "/rep", "/r"},
             usage = "[from-mask] <to-pattern>",
             desc = "Replace all blocks in the selection with another",
-            flags = "f",
+            help = "Replace all blocks in the selection with another.\n" +
+                    "The -p flag previews: it reports how many blocks would change,\n" +
+                    "by the block they would replace, without changing anything.",
+            flags = "fp",
             min = 1,
             max = 2
     )
     @CommandPermissions("worldedit.region.replace")
     @Logging(REGION)
     public void replace(FawePlayer player, EditSession editSession, @Selection Region region, @Optional Mask from, Pattern to, CommandContext context) throws WorldEditException {
+        if (context != null && context.hasFlag('p')) {
+            sendPreview(player, editSession.previewChanges(region, from == null ? new ExistingBlockMask(editSession) : from, to));
+            return;
+        }
         player.checkConfirmationRegion(() -> {
             int affected = editSession.replaceBlocks(region, from == null ? new ExistingBlockMask(editSession) : from, to);
             BBC.VISITOR_BLOCK.send(player, affected);
@@ -317,12 +327,20 @@ public class RegionCommands extends MethodCommands {
             aliases = {"/set", "/s"},
             usage = "[pattern]",
             desc = "Set all blocks within selection",
+            help = "Set all blocks within the selection.\n" +
+                    "The -p flag previews: it reports how many blocks would change,\n" +
+                    "by the block they would replace, without changing anything.",
+            flags = "p",
             min = 1,
             max = 1
     )
     @CommandPermissions("worldedit.region.set")
     @Logging(REGION)
     public void set(FawePlayer player, LocalSession session, EditSession editSession, @Selection Region selection, Pattern to, CommandContext context) throws WorldEditException {
+        if (context != null && context.hasFlag('p')) {
+            sendPreview(player, editSession.previewChanges(selection, null, to));
+            return;
+        }
         player.checkConfirmationRegion(() -> {
             int affected;
             affected = editSession.setBlocks(selection, to);
@@ -332,6 +350,31 @@ public class RegionCommands extends MethodCommands {
                     BBC.TIP_FAST.or(BBC.TIP_CANCEL, BBC.TIP_MASK, BBC.TIP_MASK_ANGLE, BBC.TIP_SET_LINEAR, BBC.TIP_SURFACE_SPREAD, BBC.TIP_SET_HAND).send(player);
             }
         }, getArguments(context), selection, context);
+    }
+
+    /**
+     * Report a dry run: the total, then the blocks that would be replaced, most common first.
+     */
+    private static void sendPreview(FawePlayer player, Map<Integer, Integer> changes) {
+        int total = 0;
+        for (int count : changes.values()) {
+            total += count;
+        }
+        player.sendMessage(BBC.getPrefix() + "Preview: " + total + " block(s) would change; nothing was edited.");
+        List<Map.Entry<Integer, Integer>> entries = new ArrayList<>(changes.entrySet());
+        entries.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
+        int shown = 0;
+        for (Map.Entry<Integer, Integer> entry : entries) {
+            if (shown++ == 20) {
+                player.sendMessage(BBC.getPrefix() + "  ... and " + (entries.size() - 20) + " more block types");
+                break;
+            }
+            int id = FaweCache.getId(entry.getKey());
+            int data = FaweCache.getData(entry.getKey());
+            BlockStateRegistry registry = BlockStateRegistry.get();
+            String name = registry != null ? registry.getName(id) : null;
+            player.sendMessage(BBC.getPrefix() + "  " + entry.getValue() + " x " + (name != null ? name + " " : "") + "#" + id + ":" + data);
+        }
     }
 
     @Command(

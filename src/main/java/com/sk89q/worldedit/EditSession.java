@@ -1654,6 +1654,39 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
     }
 
     /**
+     * Work out what setting (or replacing) blocks in a region would change, without changing
+     * anything. Honours the given filter and this session's mask (//gmask). Random patterns are
+     * sampled once per block, so the totals for them are an estimate.
+     *
+     * @param region  the region
+     * @param filter  only blocks matching this mask would be changed, or null for every block
+     * @param pattern the pattern that provides the new blocks
+     * @return combined id (id << 4 | data) of each block that would be replaced, with its count
+     */
+    public Map<Integer, Integer> previewChanges(final Region region, @Nullable final Mask filter, final com.sk89q.worldedit.function.pattern.Pattern pattern) {
+        checkNotNull(region);
+        checkNotNull(pattern);
+        Mask sessionMask = getMask();
+        Map<Integer, Integer> changes = new HashMap<>();
+        for (Vector pos : region) {
+            if (filter != null && !filter.test(pos)) {
+                continue;
+            }
+            if (sessionMask != null && !sessionMask.test(pos)) {
+                continue;
+            }
+            BaseBlock current = getLazyBlock(pos);
+            BaseBlock next = pattern.apply(pos);
+            if (next == null || (next.getId() == current.getId() && next.getData() == current.getData()
+                    && !next.hasNbtData())) {
+                continue;
+            }
+            changes.merge(FaweCache.getCombined(current), 1, Integer::sum);
+        }
+        return changes;
+    }
+
+    /**
      * Sets all the blocks inside a region to a given pattern.
      *
      * @param region  the region
