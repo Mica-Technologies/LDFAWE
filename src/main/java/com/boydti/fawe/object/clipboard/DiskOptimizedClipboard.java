@@ -194,6 +194,12 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
     }
 
     public DiskOptimizedClipboard(int width, int height, int length, File file) {
+        // The file is mapped as one buffer, which Java caps at Integer.MAX_VALUE bytes (2 per block)
+        long bytes = (long) width * (long) height * (long) length * 2L + HEADER_SIZE;
+        if (bytes > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException("Selection too large for the disk clipboard: "
+                    + width + "x" + height + "x" + length + " (at most " + ((Integer.MAX_VALUE - HEADER_SIZE) / 2) + " blocks)");
+        }
         try {
             nbtMap = new HashMap<>();
             entities = new HashSet<>();
@@ -249,7 +255,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             length = dimensions.getBlockZ();
             area = width * length;
             volume = width * length * height;
-            long size = width * height * length * 2l + HEADER_SIZE + (hasBiomes() ? area : 0);
+            long size = (long) width * height * length * 2L + HEADER_SIZE + (hasBiomes() ? area : 0);
             if (braf.length() < size) {
                 close();
                 this.braf = new RandomAccessFile(file, "rw");

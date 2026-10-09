@@ -370,21 +370,24 @@ public abstract class FawePlayer<T> extends Metadatable {
         File file = MainUtil.getFile(Fawe.imp().getDirectory(), Settings.IMP.PATHS.CLIPBOARD + File.separator + getUUID() + ".bd");
         try {
             if (file.exists() && file.length() > 5) {
-                DiskOptimizedClipboard doc = new DiskOptimizedClipboard(file);
                 Player player = toWorldEditPlayer();
                 LocalSession session = getSession();
+                if (player == null || session == null) {
+                    return;
+                }
+                // A session still cached from before a relog keeps its clipboard. Check before
+                // mapping the file: a second open mapping of it makes the next //copy fail on Windows.
                 try {
                     if (session.getClipboard() != null) {
                         return;
                     }
                 } catch (EmptyClipboardException e) {
                 }
-                if (player != null && session != null) {
-                    WorldData worldData = player.getWorld().getWorldData();
-                    Clipboard clip = doc.toClipboard();
-                    ClipboardHolder holder = new ClipboardHolder(clip, worldData);
-                    getSession().setClipboard(holder);
-                }
+                DiskOptimizedClipboard doc = new DiskOptimizedClipboard(file);
+                WorldData worldData = player.getWorld().getWorldData();
+                Clipboard clip = doc.toClipboard();
+                ClipboardHolder holder = new ClipboardHolder(clip, worldData);
+                session.setClipboard(holder);
             }
         } catch (Exception ignore) {
             Fawe.debug("====== INVALID CLIPBOARD ======");
