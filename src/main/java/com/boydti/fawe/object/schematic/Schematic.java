@@ -1,5 +1,6 @@
 package com.boydti.fawe.object.schematic;
 
+import com.sk89q.worldedit.function.mask.MaskIntersection;
 import com.boydti.fawe.object.HasFaweQueue;
 import com.boydti.fawe.object.clipboard.FaweClipboard;
 import com.boydti.fawe.object.clipboard.ReadOnlyClipboard;
@@ -148,7 +149,8 @@ public class Schematic {
             editSession.setSourceMask(null);
         }
         if (!pasteAir) {
-            copy.setSourceMask(new ExistingBlockMask(clipboard));
+            Mask existing = new ExistingBlockMask(clipboard);
+            copy.setSourceMask(sourceMask == null ? existing : new MaskIntersection(sourceMask, existing));
         }
         try {
             Operations.completeLegacy(copy);
@@ -171,17 +173,20 @@ public class Schematic {
             copy.setTransform(transform);
         }
         copy.setCopyBiomes(!(clipboard instanceof BlockArrayClipboard) || ((BlockArrayClipboard) clipboard).IMP.hasBiomes());
+        Mask sourceMask = null;
         if (extent instanceof EditSession) {
             EditSession editSession = (EditSession) extent;
-            Mask sourceMask = editSession.getSourceMask();
+            sourceMask = editSession.getSourceMask();
             if (sourceMask != null) {
-                new MaskTraverser(sourceMask).reset(extent);
+                // A source mask tests the clipboard's blocks, not the destination's
+                new MaskTraverser(sourceMask).reset(source);
                 copy.setSourceMask(sourceMask);
                 editSession.setSourceMask(null);
             }
         }
         if (!pasteAir) {
-            copy.setSourceMask(new ExistingBlockMask(clipboard));
+            Mask existing = new ExistingBlockMask(clipboard);
+            copy.setSourceMask(sourceMask == null ? existing : new MaskIntersection(sourceMask, existing));
         }
         Operations.completeBlindly(copy);
     }

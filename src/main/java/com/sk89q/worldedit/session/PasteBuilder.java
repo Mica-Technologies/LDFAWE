@@ -19,6 +19,7 @@
 
 package com.sk89q.worldedit.session;
 
+import com.sk89q.worldedit.function.mask.MaskIntersection;
 import com.boydti.fawe.util.MaskTraverser;
 import com.sk89q.worldedit.EditSession;
 import com.sk89q.worldedit.Vector;
@@ -62,10 +63,20 @@ public class PasteBuilder {
      * @param targetWorldData world data of the target
      */
     public PasteBuilder(ClipboardHolder holder, Extent targetExtent, WorldData targetWorldData) {
+        this(holder, holder.getClipboard(), targetExtent, targetWorldData);
+    }
+
+    /**
+     * Create a new instance pasting a specific clipboard of the holder. A holder of several
+     * schematics returns a random one from each {@link ClipboardHolder#getClipboard()} call, so a
+     * caller that has already chosen one (to compute the target or selection) must pass it here.
+     */
+    public PasteBuilder(ClipboardHolder holder, Clipboard clipboard, Extent targetExtent, WorldData targetWorldData) {
         checkNotNull(holder);
+        checkNotNull(clipboard);
         checkNotNull(targetExtent);
         checkNotNull(targetWorldData);
-        this.clipboard = holder.getClipboard();
+        this.clipboard = clipboard;
         this.worldData = holder.getWorldData();
         this.transform = holder.getTransform();
         this.targetExtent = targetExtent;
@@ -125,8 +136,9 @@ public class PasteBuilder {
         if (this.canApply != null) {
             copy.setFilterFunction(this.canApply);
         }
+        Mask sourceMask = null;
         if (targetExtent instanceof EditSession) {
-            Mask sourceMask = ((EditSession) targetExtent).getSourceMask();
+            sourceMask = ((EditSession) targetExtent).getSourceMask();
             if (sourceMask != null) {
                 new MaskTraverser(sourceMask).reset(extent);
                 copy.setSourceMask(sourceMask);
@@ -134,7 +146,9 @@ public class PasteBuilder {
             }
         }
         if (ignoreAirBlocks) {
-            copy.setSourceMask(new ExistingBlockMask(clipboard));
+            // Combine with any source mask (//smask) rather than replacing it
+            Mask existing = new ExistingBlockMask(clipboard);
+            copy.setSourceMask(sourceMask == null ? existing : new MaskIntersection(sourceMask, existing));
         }
         return copy;
     }

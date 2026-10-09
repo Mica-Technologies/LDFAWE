@@ -19,6 +19,7 @@
 
 package com.sk89q.worldedit.command;
 
+import com.sk89q.worldedit.session.PasteBuilder;
 import com.boydti.fawe.Fawe;
 import com.boydti.fawe.FaweAPI;
 import com.boydti.fawe.config.BBC;
@@ -457,7 +458,7 @@ public class ClipboardCommands extends MethodCommands {
     @Command(
             aliases = {"/paste"},
             usage = "",
-            flags = "sao",
+            flags = "saobe",
             desc = "Paste the clipboard's contents",
             help =
                     "Pastes the clipboard's contents.\n" +
@@ -476,7 +477,8 @@ public class ClipboardCommands extends MethodCommands {
                       @Switch('a') boolean ignoreAirBlocks, @Switch('b') boolean ignoreBiomes, @Switch('e') boolean ignoreEntities, @Switch('o') boolean atOrigin,
                       @Switch('s') boolean selectPasted) throws WorldEditException {
         ClipboardHolder holder = session.getClipboard();
-        if (holder.getTransform().isIdentity() && editSession.getSourceMask() == null) {
+        // The fast path always pastes biomes and entities, so it is only taken when both are wanted
+        if (holder.getTransform().isIdentity() && editSession.getSourceMask() == null && !ignoreBiomes && !ignoreEntities) {
             place(player, session, editSession, ignoreAirBlocks, atOrigin, selectPasted);
             return;
         }
@@ -485,8 +487,7 @@ public class ClipboardCommands extends MethodCommands {
         Vector to = atOrigin ? clipboard.getOrigin() : session.getPlacementPosition(player);
         checkPaste(player, editSession, to, holder, clipboard);
 
-        Operation operation = holder
-                .createPaste(editSession, editSession.getWorldData())
+        Operation operation = new PasteBuilder(holder, clipboard, editSession, editSession.getWorldData())
                 .to(to)
                 .ignoreAirBlocks(ignoreAirBlocks)
                 .ignoreBiomes(ignoreBiomes)
