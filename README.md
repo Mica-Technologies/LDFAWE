@@ -28,6 +28,41 @@ mod's wiki: https://github.com/boy0001/FastAsyncWorldedit/wiki
 * A standalone, dedicated Wiki for the LDFAWE mod is planned. If and when the feature set or commands diverge from the
   upstream version, the Wiki will be created to ensure accurate, up-to-date documentation.
 
+## Server Notes
+
+These differ from the upstream FAWE documentation.
+
+### Rollback database (SQLite)
+
+`/frb` (rollback), the inspect tool's history lookups, and edit logging use a small SQLite database per world
+(`config/FastAsyncWorldEdit/history/<world>/summary.db`). LDFAWE bundles the SQLite JDBC driver, so no extra
+download is needed. It is enabled by `history.use-database: true` in `config/FastAsyncWorldEdit/config.yml`.
+
+- **Supported platforms:** Windows, macOS and Linux (glibc and musl/Alpine), each on x64 and arm64. Other platforms
+  (32-bit systems, 32-bit ARM, FreeBSD) are not bundled; there the database is switched off with one console message
+  and everything else keeps working.
+- **Linux hosts with a `noexec` `/tmp`:** the driver unpacks its native library into Java's temporary folder at
+  startup, which fails if that folder does not allow running programs (common on hardened hosts and some containers).
+  Point it at a writable folder that does, by adding this to the server's Java start command (before `-jar`):
+
+  ```
+  -Dorg.sqlite.tmpdir=/path/to/writable/folder
+  ```
+
+### Block ids above 4095 (RoughlyEnoughIDs)
+
+Edits, undo/redo, masks, rotation, schematics (`.schematic`, `.nbt`, `.fawe`) and snapshot `//restore` all support
+block ids above 4095. History recorded by older LDFAWE versions cannot be repaired retroactively.
+
+### LDFAWE-specific commands and behaviour
+
+- `//set -p <pattern>` and `//replace -p [from] <to>` preview an edit: they report how many blocks would change, by
+  block, without changing anything.
+- `//history [player] [world]` lists a player's stored edits, newest first (works for offline players and from the
+  console). `//undo [times] <player>` then rolls back that player's edits.
+- Edits never cause block updates or neighbour notifications (sections are written directly), so they are safe for
+  redstone, wire networks and physics-sensitive blocks.
+
 ## Official FAWE Mod
 
 Information about official versions of the FAWE mod can be found
