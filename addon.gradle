@@ -43,3 +43,32 @@ task printMinecraftVersion {
         println project.findProperty('minecraftVersion')
     }
 }
+
+// SHADOW: SQLITE DRIVER
+// The buildscript relocates every shadowed dependency (enableRelocation). sqlite-jdbc must keep its
+// own package because its native library binds to org.sqlite.core.NativeDB by name, and the driver is
+// loaded reflectively (Class.forName("org.sqlite.JDBC")), so minimisation must not strip it either.
+// Every other shadowed dependency is relocated explicitly to the same prefix as before.
+tasks.named('shadowJar').configure {
+    enableRelocation = false
+    relocate 'org.yaml.snakeyaml', "${modGroup}.shadow.org.yaml.snakeyaml"
+    relocate 'it.unimi.dsi.fastutil', "${modGroup}.shadow.it.unimi.dsi.fastutil"
+    relocate 'com.github.luben', "${modGroup}.shadow.com.github.luben"
+    minimize {
+        exclude(dependency('org.xerial:sqlite-jdbc:.*'))
+    }
+    // Natives for 64-bit Windows, macOS and Linux (glibc and musl) only; the others double the jar
+    exclude 'org/sqlite/native/FreeBSD/**'
+    exclude 'org/sqlite/native/Linux-Android/**'
+    exclude 'org/sqlite/native/Linux-Musl/x86/**'
+    exclude 'org/sqlite/native/Linux/arm/**'
+    exclude 'org/sqlite/native/Linux/armv6/**'
+    exclude 'org/sqlite/native/Linux/armv7/**'
+    exclude 'org/sqlite/native/Linux/ppc64/**'
+    exclude 'org/sqlite/native/Linux/x86/**'
+    exclude 'org/sqlite/native/Windows/armv7/**'
+    exclude 'org/sqlite/native/Windows/x86/**'
+    // sqlite-jdbc is a multi-release jar; its Java 9 class (GraalVM native-image support only) is a
+    // class version FML 1.12's annotation scanner cannot read, which it reports as a broken jar
+    exclude 'META-INF/versions/**'
+}
