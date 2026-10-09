@@ -35,97 +35,48 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
     private IFaweQueueMap map;
 
     /**
-     * Per-thread cache of recently accessed chunks and the current section. Avoids
-     * repeated chunk lookups when block operations hit nearby chunks. The chunk ring
-     * buffer (4 entries) handles random-access patterns like relighting or masks that
-     * bounce between a few chunks. ThreadLocal eliminates cross-thread contention.
+     * Per-thread cache of the last chunk looked up, so runs of block/light reads in the same
+     * chunk skip the chunk lookup. It is per thread so threads never share mutable state.
+     *
+     * Only the chunk is cached, and only weakly: sections are re-read from the chunk on every
+     * access (a section can be created or removed between calls), a cached chunk is dropped
+     * once the server unloads it, and an idle cache on a pooled thread does not keep the
+     * chunk or its world alive.
      */
-    protected static class SectionCache<CHUNK, CHUNKSECTIONS, SECTION> {
-        private static final int CHUNK_CACHE_SIZE = 4;
-
-        // Current section state (single entry — changes constantly within a chunk)
-        public int lastSectionX = Integer.MIN_VALUE;
-        public int lastSectionZ = Integer.MIN_VALUE;
-        public int lastSectionY = Integer.MIN_VALUE;
-        public CHUNK lastChunk;
-        public CHUNKSECTIONS lastChunkSections;
-        public SECTION lastSection;
-
-        // Sky light upward-scan cache: avoids re-scanning null sections for the same chunk
-        public int skyScanChunkX = Integer.MIN_VALUE;
-        public int skyScanChunkZ = Integer.MIN_VALUE;
-        public int skyScanResultY = -1; // section Y of first non-null section found, or -1
-
-        // Ring buffer of recently accessed chunks
-        private final int[] cachedCX = new int[CHUNK_CACHE_SIZE];
-        private final int[] cachedCZ = new int[CHUNK_CACHE_SIZE];
-        private final Object[] cachedChunks = new Object[CHUNK_CACHE_SIZE];
-        private final Object[] cachedSections = new Object[CHUNK_CACHE_SIZE];
-        private int ringIndex = 0;
-
-        public SectionCache() {
-            java.util.Arrays.fill(cachedCX, Integer.MIN_VALUE);
-            java.util.Arrays.fill(cachedCZ, Integer.MIN_VALUE);
-        }
-
-        /** Look up a chunk in the ring buffer. Returns the index, or -1 if not found. */
-        public int findChunk(int cx, int cz) {
-            for (int i = 0; i < CHUNK_CACHE_SIZE; i++) {
-                if (cachedCX[i] == cx && cachedCZ[i] == cz) {
-                    return i;
-                }
-            }
-            return -1;
-        }
-
-        /** Store a chunk in the ring buffer, evicting the oldest entry. */
-        @SuppressWarnings("unchecked")
-        public void storeChunk(int cx, int cz, CHUNK chunk, CHUNKSECTIONS sections) {
-            cachedCX[ringIndex] = cx;
-            cachedCZ[ringIndex] = cz;
-            cachedChunks[ringIndex] = chunk;
-            cachedSections[ringIndex] = sections;
-            ringIndex = (ringIndex + 1) % CHUNK_CACHE_SIZE;
-        }
-
-        @SuppressWarnings("unchecked")
-        public CHUNK getChunkAt(int index) { return (CHUNK) cachedChunks[index]; }
-
-        @SuppressWarnings("unchecked")
-        public CHUNKSECTIONS getSectionsAt(int index) { return (CHUNKSECTIONS) cachedSections[index]; }
+    protected static class SectionCache<CHUNK> {
+        public int lastChunkX = Integer.MIN_VALUE;
+        public int lastChunkZ = Integer.MIN_VALUE;
+        /** Null when the last lookup found no chunk (also cached, to avoid retrying loads). */
+        public java.lang.ref.WeakReference<CHUNK> lastChunk;
 
         public void clear() {
-            lastSectionX = Integer.MIN_VALUE;
-            lastSectionZ = Integer.MIN_VALUE;
-            lastSectionY = -1;
+            lastChunkX = Integer.MIN_VALUE;
+            lastChunkZ = Integer.MIN_VALUE;
             lastChunk = null;
-            lastChunkSections = null;
-            lastSection = null;
-            skyScanChunkX = Integer.MIN_VALUE;
-            skyScanChunkZ = Integer.MIN_VALUE;
-            skyScanResultY = -1;
-            java.util.Arrays.fill(cachedCX, Integer.MIN_VALUE);
-            java.util.Arrays.fill(cachedCZ, Integer.MIN_VALUE);
-            java.util.Arrays.fill(cachedChunks, null);
-            java.util.Arrays.fill(cachedSections, null);
-            ringIndex = 0;
         }
     }
 
-    private final ThreadLocal<SectionCache<CHUNK, CHUNKSECTIONS, SECTION>> sectionCacheThreadLocal =
+    private final ThreadLocal<SectionCache<CHUNK>> sectionCacheThreadLocal =
             ThreadLocal.withInitial(SectionCache::new);
 
-    protected SectionCache<CHUNK, CHUNKSECTIONS, SECTION> getSectionCache() {
+    protected SectionCache<CHUNK> getSectionCache() {
         return sectionCacheThreadLocal.get();
     }
 
-    // Legacy accessors — kept for subclass compatibility
-    public int getLastSectionX() { return getSectionCache().lastSectionX; }
-    public int getLastSectionZ() { return getSectionCache().lastSectionZ; }
-    public int getLastSectionY() { return getSectionCache().lastSectionY; }
-    public CHUNK getLastChunk() { return getSectionCache().lastChunk; }
-    public CHUNKSECTIONS getLastChunkSections() { return getSectionCache().lastChunkSections; }
-    public SECTION getLastSection() { return getSectionCache().lastSection; }
+    /**
+     * Forget the calling thread's cached chunk.
+     */
+    public void clearSectionCache() {
+        sectionCacheThreadLocal.remove();
+    }
+
+    /**
+     * Whether a chunk object obtained earlier may still be used for reads and writes. Queues
+     * whose chunks can be unloaded and replaced (e.g. a live world) override this.
+     */
+    protected boolean isChunkValid(CHUNK chunk) {
+        return true;
+    }
 
 
     private World weWorld;
@@ -456,7 +407,7 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
 
     @Override
     public void clear() {
-        getSectionCache().clear();
+        clearSectionCache();
         map.clear();
         runTasks();
     }
@@ -467,54 +418,32 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
     }
 
     public SECTION getCachedSection(CHUNKSECTIONS chunk, int cy) {
-        return (SECTION) getSectionCache().lastChunkSections;
+        return (SECTION) chunk;
     }
 
     /**
-     * Ensures the section cache is populated for the given chunk/section coordinates.
-     * Returns the cached section, or null if the chunk or section doesn't exist.
-     * Uses a 4-entry ring buffer for chunk lookups to reduce thrashing on random access.
+     * Returns the section at the given section coordinates, or null if the chunk could not be
+     * loaded or the section does not exist. The section is always read from the chunk's
+     * current section array, never from a cache.
      */
     protected SECTION ensureSectionCached(int cx, int cy, int cz) throws FaweException.FaweChunkLoadException {
-        SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
-        if (cx != cache.lastSectionX || cz != cache.lastSectionZ) {
-            cache.lastSectionX = cx;
-            cache.lastSectionZ = cz;
-            cache.lastSectionY = cy;
-            // Check ring buffer before doing a full chunk load
-            int ringHit = cache.findChunk(cx, cz);
-            if (ringHit >= 0) {
-                cache.lastChunk = cache.getChunkAt(ringHit);
-                cache.lastChunkSections = cache.getSectionsAt(ringHit);
-            } else {
-                cache.lastChunk = ensureChunkLoaded(cx, cz);
-                if (cache.lastChunk != null) {
-                    cache.lastChunkSections = getSections(cache.lastChunk);
-                    cache.storeChunk(cx, cz, cache.lastChunk, cache.lastChunkSections);
-                } else {
-                    cache.lastChunkSections = null;
-                }
-            }
-            cache.lastSection = (cache.lastChunkSections != null)
-                    ? getCachedSection(cache.lastChunkSections, cy) : null;
-        } else if (cy != cache.lastSectionY) {
-            cache.lastSectionY = cy;
-            cache.lastSection = (cache.lastChunkSections != null)
-                    ? getCachedSection(cache.lastChunkSections, cy) : null;
+        CHUNK chunk = ensureChunkCached(cx, cz);
+        if (chunk == null) {
+            return null;
         }
-        return cache.lastSection;
+        CHUNKSECTIONS sections = getSections(chunk);
+        return sections != null ? getCachedSection(sections, cy) : null;
     }
 
     public abstract int getCombinedId4Data(SECTION section, int x, int y, int z);
 
     public int getLocalCombinedId4Data(CHUNK chunk, int x, int y, int z) {
-        SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
-        CHUNKSECTIONS sections = getSections(cache.lastChunk);
+        CHUNKSECTIONS sections = getSections(chunk);
         SECTION section = getCachedSection(sections, y >> 4);
         if (section == null) {
             return 0;
         }
-        return getCombinedId4Data(cache.lastSection, x, y, z);
+        return getCombinedId4Data(section, x, y, z);
     }
 
     public abstract int getBiome(CHUNK chunk, int x, int z);
@@ -633,42 +562,22 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
         int cx = x >> 4;
         int cz = z >> 4;
         int cy = y >> 4;
-        SECTION section = ensureSectionCached(cx, cy, cz);
-        if (section == null) {
-            SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
-            if (cache.lastChunkSections == null) {
-                return 0;
-            }
-            // Use cached scan result if we've already scanned this chunk column
-            if (cache.skyScanChunkX == cx && cache.skyScanChunkZ == cz && cache.skyScanResultY >= 0) {
-                if (cy < cache.skyScanResultY) {
-                    // Jump directly to the known first non-null section
-                    cy = cache.skyScanResultY;
-                    section = getCachedSection(cache.lastChunkSections, cy);
-                    if (section != null) {
-                        cache.lastSection = section;
-                        cache.lastSectionY = cy;
-                    }
-                }
-            }
-            if (section == null) {
-                int max = FaweChunk.HEIGHT >> 4;
-                do {
-                    if (++cy >= max) {
-                        return 15;
-                    }
-                    section = getCachedSection(cache.lastChunkSections, cy);
-                } while (section == null);
-                cache.lastSection = section;
-                cache.lastSectionY = cy;
-                // Cache the scan result for this chunk column
-                cache.skyScanChunkX = cx;
-                cache.skyScanChunkZ = cz;
-                cache.skyScanResultY = cy;
-            }
+        CHUNK chunk = ensureChunkCached(cx, cz);
+        if (chunk == null) {
+            return 0;
         }
-        if (section == null) {
-            return getSkyLight(x, y + 16, z);
+        CHUNKSECTIONS sections = getSections(chunk);
+        if (sections == null) {
+            return 0;
+        }
+        // A missing section takes the sky light of the first section above it
+        SECTION section = getCachedSection(sections, cy);
+        int max = FaweChunk.HEIGHT >> 4;
+        while (section == null) {
+            if (++cy >= max) {
+                return 15;
+            }
+            section = getCachedSection(sections, cy);
         }
         return getSkyLight(section, x, y, z);
     }
@@ -730,30 +639,27 @@ public abstract class MappedFaweQueue<WORLD, CHUNK, CHUNKSECTIONS, SECTION> impl
     }
 
     /**
-     * Ensures the chunk cache is populated for the given chunk coordinates.
-     * Invalidates the section cache since biome/tile lookups don't need a section.
+     * Returns the chunk at the given chunk coordinates, loading it if needed, using the calling
+     * thread's one-chunk cache. A cached chunk is only reused while it is still valid (see
+     * {@link #isChunkValid}); otherwise it is looked up again.
      */
     protected CHUNK ensureChunkCached(int cx, int cz) throws FaweException.FaweChunkLoadException {
-        SectionCache<CHUNK, CHUNKSECTIONS, SECTION> cache = getSectionCache();
-        cache.lastSectionY = -1;
-        if (cx != cache.lastSectionX || cz != cache.lastSectionZ) {
-            cache.lastSectionX = cx;
-            cache.lastSectionZ = cz;
-            int ringHit = cache.findChunk(cx, cz);
-            if (ringHit >= 0) {
-                cache.lastChunk = cache.getChunkAt(ringHit);
-                cache.lastChunkSections = cache.getSectionsAt(ringHit);
-            } else {
-                cache.lastChunk = ensureChunkLoaded(cx, cz);
-                if (cache.lastChunk != null) {
-                    cache.lastChunkSections = getSections(cache.lastChunk);
-                    cache.storeChunk(cx, cz, cache.lastChunk, cache.lastChunkSections);
-                } else {
-                    cache.lastChunkSections = null;
-                }
+        SectionCache<CHUNK> cache = getSectionCache();
+        if (cx == cache.lastChunkX && cz == cache.lastChunkZ) {
+            java.lang.ref.WeakReference<CHUNK> ref = cache.lastChunk;
+            if (ref == null) {
+                return null;
+            }
+            CHUNK chunk = ref.get();
+            if (chunk != null && isChunkValid(chunk)) {
+                return chunk;
             }
         }
-        return cache.lastChunk;
+        CHUNK chunk = ensureChunkLoaded(cx, cz);
+        cache.lastChunkX = cx;
+        cache.lastChunkZ = cz;
+        cache.lastChunk = chunk != null ? new java.lang.ref.WeakReference<>(chunk) : null;
+        return chunk;
     }
 
     @Override

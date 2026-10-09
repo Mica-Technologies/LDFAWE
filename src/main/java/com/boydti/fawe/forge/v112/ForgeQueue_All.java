@@ -177,6 +177,12 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
     }
 
     @Override
+    protected boolean isChunkValid(Chunk chunk) {
+        // An unloaded chunk object may already have been replaced by a newly loaded one
+        return chunk.isLoaded();
+    }
+
+    @Override
     public ExtendedBlockStorage getCachedSection(ExtendedBlockStorage[] ExtendedBlockStorages, int cy) {
         return ExtendedBlockStorages[cy];
     }
