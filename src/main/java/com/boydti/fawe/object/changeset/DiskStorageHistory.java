@@ -67,6 +67,24 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
 
     private int index;
 
+    /*
+     * Set once close() has run. The history files are compressed streams that start with a
+     * header, so they cannot be reopened for appending; reopening them would truncate the
+     * edit's recorded history. Writes that arrive after close are dropped instead.
+     */
+    private volatile boolean closed;
+    private boolean warnedWriteAfterClose;
+
+    private static final OutputStream DISCARD = new OutputStream() {
+        @Override
+        public void write(int b) {
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) {
+        }
+    };
+
     public DiskStorageHistory(World world, UUID uuid) {
         super(world);
         init(uuid, Fawe.imp().getWorldName(world));
@@ -195,6 +213,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
     public boolean close() {
         super.close();
         synchronized (this) {
+            closed = true;
             boolean flushed = osBD != null || osBIO != null || osNBTF != null || osNBTT != null || osENTCF != null || osENTCT != null;
             try {
                 if (osBD != null) {
@@ -262,12 +281,22 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         return total;
     }
 
+    private synchronized OutputStream writeAfterClose(File file) {
+        if (!warnedWriteAfterClose) {
+            warnedWriteAfterClose = true;
+            org.apache.logging.log4j.LogManager.getLogger("FAWE").warn("History " + file
+                    + " was written to after it was closed; the late changes are not recorded and cannot be undone");
+        }
+        return DISCARD;
+    }
+
     @Override
     public OutputStream getBlockOS(int x, int y, int z) throws IOException {
         if (osBD != null) {
             return osBD;
         }
         synchronized (this) {
+            if (closed) return writeAfterClose(bdFile);
             bdFile.getParentFile().mkdirs();
             bdFile.createNewFile();
             osBD = getCompressedOS(new FileOutputStream(bdFile));
@@ -282,6 +311,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
             return osBIO;
         }
         synchronized (this) {
+            if (closed) return writeAfterClose(bioFile);
             bioFile.getParentFile().mkdirs();
             bioFile.createNewFile();
             osBIO = getCompressedOS(new FileOutputStream(bioFile));
@@ -294,6 +324,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         if (osENTCT != null) {
             return osENTCT;
         }
+        if (closed) return new NBTOutputStream(writeAfterClose(enttFile));
         enttFile.getParentFile().mkdirs();
         enttFile.createNewFile();
         osENTCT = new NBTOutputStream((DataOutput) getCompressedOS(new FileOutputStream(enttFile)));
@@ -305,6 +336,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         if (osENTCF != null) {
             return osENTCF;
         }
+        if (closed) return new NBTOutputStream(writeAfterClose(entfFile));
         entfFile.getParentFile().mkdirs();
         entfFile.createNewFile();
         osENTCF = new NBTOutputStream((DataOutput) getCompressedOS(new FileOutputStream(entfFile)));
@@ -316,6 +348,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         if (osNBTT != null) {
             return osNBTT;
         }
+        if (closed) return new NBTOutputStream(writeAfterClose(nbttFile));
         nbttFile.getParentFile().mkdirs();
         nbttFile.createNewFile();
         osNBTT = new NBTOutputStream((DataOutput) getCompressedOS(new FileOutputStream(nbttFile)));
@@ -327,6 +360,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         if (osNBTF != null) {
             return osNBTF;
         }
+        if (closed) return new NBTOutputStream(writeAfterClose(nbtfFile));
         nbtfFile.getParentFile().mkdirs();
         nbtfFile.createNewFile();
         osNBTF = new NBTOutputStream((DataOutput) getCompressedOS(new FileOutputStream(nbtfFile)));

@@ -485,9 +485,16 @@ public interface FaweQueue extends HasFaweQueue, Extent {
     }
 
     /**
-     * Lock the thread until the queue is empty or the timeout is exceeded.
+     * Lock the thread until the queue has been fully dispatched.
      *
-     * @param time maximum total time to wait in milliseconds
+     * <p>This does not give up after a timeout: callers (EditSession) close the change set
+     * as soon as this returns, so returning while chunks are still pending would let those
+     * chunks write history into a closed change set. The queue leaves the ACTIVE stage only
+     * once SetQueue has applied its last chunk, so wait for that rather than for the chunk
+     * map to empty (chunks leave the map before they are applied).
+     *
+     * @param time how long to wait between checks, in milliseconds (the wait also wakes when
+     *             the queue finishes)
      */
     default void flush(int time) {
         if (size() > 0) {
@@ -495,17 +502,13 @@ public interface FaweQueue extends HasFaweQueue, Extent {
                 SetQueue.IMP.flush(this);
             } else {
                 if (enqueue()) {
-                    long deadline = System.currentTimeMillis() + time;
-                    while (!isEmpty() && getStage() == SetQueue.QueueStage.ACTIVE) {
-                        long remaining = deadline - System.currentTimeMillis();
-                        if (remaining <= 0) break;
+                    long pollMs = Math.max(1, Math.min(time, 50));
+                    while (getStage() == SetQueue.QueueStage.ACTIVE) {
                         synchronized (this) {
                             try {
-                                // Poll in short intervals so we detect completion promptly
-                                this.wait(Math.min(remaining, 50));
+                                this.wait(pollMs);
                             } catch (InterruptedException e) {
                                 e.printStackTrace();
-                                break;
                             }
                         }
                     }
