@@ -1,5 +1,6 @@
 package com.boydti.fawe.jnbt.anvil;
 
+import com.boydti.fawe.Fawe;
 import com.boydti.fawe.FaweCache;
 import com.boydti.fawe.jnbt.NBTStreamer;
 import com.boydti.fawe.object.FaweChunk;
@@ -112,6 +113,10 @@ public class MCAChunk extends FaweChunk<Void> {
         streamer.addReader(".Level.Sections.#", new RunnableVal2<Integer, CompoundTag>() {
             @Override
             public void run(Integer index, CompoundTag tag) {
+                Map<String, Tag> section = tag.getValue();
+                if (section.containsKey("Palette") || section.containsKey("Add") || section.containsKey("Add2")) {
+                    unsupportedSections = true;
+                }
                 int layer = tag.getByte("Y");
                 ids[layer] = tag.getByteArray("Blocks");
                 data[layer] = tag.getByteArray("Data");
@@ -167,6 +172,25 @@ public class MCAChunk extends FaweChunk<Void> {
             });
         }
         streamer.readFully();
+        if (unsupportedSections) {
+            // This class only understands 8-bit block ids. Refuse the chunk rather than load it
+            // with its extended ids cut down: an unloaded chunk is left untouched when the region
+            // file is written back.
+            warnUnsupported();
+            throw new IOException("Chunk " + x + "," + z + " uses block ids above 255 or RoughlyEnoughIDs"
+                    + " palette sections, which anvil operations do not support; it was left unchanged");
+        }
+    }
+
+    private boolean unsupportedSections;
+    private static volatile boolean warnedUnsupported;
+
+    private static void warnUnsupported() {
+        if (!warnedUnsupported) {
+            warnedUnsupported = true;
+            Fawe.debugPlain("Anvil operations skip chunks with block ids above 255 or RoughlyEnoughIDs palette"
+                    + " sections (they would be corrupted); those chunks are left unchanged.");
+        }
     }
 
     public void write(NBTOutputStream nbtOut) throws IOException {
