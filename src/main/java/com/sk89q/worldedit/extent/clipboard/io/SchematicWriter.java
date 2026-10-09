@@ -49,6 +49,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class SchematicWriter implements ClipboardWriter {
 
     private static final int MAX_SIZE = Short.MAX_VALUE - Short.MIN_VALUE;
+
+    /**
+     * Byte array with bits 8-15 of every block id, written alongside AddBlocks (bits 8-11) when a
+     * clipboard holds block ids above 4095. Read by {@link com.boydti.fawe.jnbt.SchematicStreamer}.
+     */
+    public static final String ADD_BLOCKS_FULL = "AddBlocksFull";
     private final NBTOutputStream outputStream;
 
     /**
@@ -72,6 +78,7 @@ public class SchematicWriter implements ClipboardWriter {
         public byte[] blocks;
         public byte[] blockData;
         public byte[] addBlocks;
+        public byte[] addBlocksFull;
         public List<Tag> tileEntities;
 
         public ForEach(int[] yarea, int[] zwidth, byte[] blocks, byte[] blockData, List<Tag> tileEntities) {
@@ -94,12 +101,25 @@ public class SchematicWriter implements ClipboardWriter {
             blocks[index] = (byte) id;
             if (FaweCache.hasData(id)) {
                 blockData[index] = (byte) block.getData();
-                if (id > 255) {
-                    if (addBlocks == null) { // Lazily create section
-                        addBlocks = new byte[((blocks.length + 1) >> 1)];
-                    }
-                    addBlocks[index >> 1] = (byte) (((index & 1) == 0) ? addBlocks[index >> 1] & 0xF0 | (id >> 8) & 0xF : addBlocks[index >> 1] & 0xF | ((id >> 8) & 0xF) << 4);
+            }
+            if (id > 255) {
+                if (addBlocks == null) { // Lazily create section
+                    addBlocks = new byte[((blocks.length + 1) >> 1)];
                 }
+                addBlocks[index >> 1] = (byte) (((index & 1) == 0) ? addBlocks[index >> 1] & 0xF0 | (id >> 8) & 0xF : addBlocks[index >> 1] & 0xF | ((id >> 8) & 0xF) << 4);
+                if (id > 4095) {
+                    if (addBlocksFull == null) {
+                        // Blocks visited so far are at most 4095, so the nibbles hold their bits
+                        addBlocksFull = new byte[blocks.length];
+                        for (int i = 0; i < addBlocksFull.length; i++) {
+                            int pair = addBlocks[i >> 1];
+                            addBlocksFull[i] = (byte) (((i & 1) == 0) ? pair & 0xF : (pair >> 4) & 0xF);
+                        }
+                    }
+                }
+            }
+            if (addBlocksFull != null) {
+                addBlocksFull[index] = (byte) (id >> 8);
             }
             CompoundTag rawTag = block.getNbtData();
             if (rawTag != null) {
@@ -143,8 +163,7 @@ public class SchematicWriter implements ClipboardWriter {
         final DataOutput rawStream = outputStream.getOutputStream();
         outputStream.writeLazyCompoundTag("Schematic", new NBTOutputStream.LazyWrite() {
             private boolean hasAdd = false;
-            private boolean hasTile = false;
-            private boolean hasData = false;
+            private boolean hasFullAdd = false;
 
             @Override
             public void write(NBTOutputStream out) throws IOException {
@@ -162,166 +181,91 @@ public class SchematicWriter implements ClipboardWriter {
                 out.writeNamedTag("WEOffsetZ", (offset.getBlockZ()));
                 out.writeNamedTag("Platform", Fawe.imp().getPlatform());
 
-                if (clipboard.IMP instanceof WorldCopyClipboard) {
-                    List<CompoundTag> tileEntities = new ArrayList<CompoundTag>();
-                    FastByteArrayOutputStream ids = new FastByteArrayOutputStream();
-                    FastByteArrayOutputStream datas = new FastByteArrayOutputStream();
-                    FastByteArrayOutputStream add = new FastByteArrayOutputStream();
-
-                    OutputStream idsOut = new PGZIPOutputStream(ids);
-                    OutputStream dataOut = new PGZIPOutputStream(datas);
-                    OutputStream addOut = new PGZIPOutputStream(add);
-
-                    byte[] addAcc = new byte[1];
-
-                    clipboard.IMP.forEach(new FaweClipboard.BlockReader() {
-                        int index;
-
-                        @Override
-                        public void run(int x, int y, int z, BaseBlock block) {
-                            try {
-                                // id
-                                int id = block.getId();
-                                idsOut.write(id);
-                                // data
-                                int data = block.getData();
-                                dataOut.write(data);
-                                // Nbt
-                                CompoundTag nbt = block.getNbtData();
-                                if (nbt != null) {
-                                    hasTile = true;
-                                    tileEntities.add(nbt);
+                // Blocks: the low 8 bits of each id
+                out.writeNamedTagName("Blocks", NBTConstants.TYPE_BYTE_ARRAY);
+                out.getOutputStream().writeInt(volume);
+                clipboard.IMP.streamIds(new NBTStreamer.ByteReader() {
+                    @Override
+                    public void run(int index, int id) {
+                        try {
+                            if (id > 255) {
+                                hasAdd = true;
+                                if (id > 4095) {
+                                    hasFullAdd = true;
                                 }
-                                // Add
-                                if (id > 255) {
-                                    int add = id >> 8;
-                                    if (!hasAdd) {
-                                        hasAdd = true;
-                                        for (int i = 0; i < index >> 1; i++) {
-                                            addOut.write(new byte[index >> 1]);
-                                        }
-                                    }
-                                    if ((index & 1) == 1) {
-                                        addOut.write(addAcc[0] + (add << 4));
-                                        addAcc[0] = 0;
-                                    } else {
-                                        addAcc[0] = (byte) add;
-                                    }
-                                }
-                                // Index
-                                index++;
-                            } catch (IOException e) {
-                                e.printStackTrace();
                             }
-                        }
-                    }, true);
-                    if (addAcc[0] != 0) addOut.write(addAcc[0]);
-
-                    idsOut.close();
-                    dataOut.close();
-                    addOut.close();
-
-                    out.writeNamedTagName("Blocks", NBTConstants.TYPE_BYTE_ARRAY);
-                    out.getOutputStream().writeInt(volume);
-                    try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(ids.toByteArray()))) {
-                        ByteStreams.copy(in, (OutputStream) rawStream);
-                    }
-
-                    out.writeNamedTagName("Data", NBTConstants.TYPE_BYTE_ARRAY);
-                    out.getOutputStream().writeInt(volume);
-                    try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(datas.toByteArray()))) {
-                        ByteStreams.copy(in, (OutputStream) rawStream);
-                    }
-
-                    if (hasAdd) {
-                        out.writeNamedTagName("AddBlocks", NBTConstants.TYPE_BYTE_ARRAY);
-                        int addLength = (volume + 1) >> 1;
-                        out.getOutputStream().writeInt(addLength);
-                        try (GZIPInputStream in = new GZIPInputStream(new ByteArrayInputStream(add.toByteArray()))) {
-                            ByteStreams.copy(in, (OutputStream) rawStream);
+                            rawStream.writeByte(id);
+                        } catch (IOException e) {
+                            e.printStackTrace();
                         }
                     }
-                    if (hasTile) {
-                        out.writeNamedTag("TileEntities", new ListTag(CompoundTag.class, tileEntities));
-                    } else {
-                        out.writeNamedEmptyList("TileEntities");
+                });
+
+                out.writeNamedTagName("Data", NBTConstants.TYPE_BYTE_ARRAY);
+                out.getOutputStream().writeInt(volume);
+                clipboard.IMP.streamDatas(new NBTStreamer.ByteReader() {
+                    @Override
+                    public void run(int index, int data) {
+                        try {
+                            rawStream.writeByte(data);
+                        } catch (IOException e) {
+                            e.printStackTrace();
+                        }
                     }
-                } else {
-                    out.writeNamedTagName("Blocks", NBTConstants.TYPE_BYTE_ARRAY);
-                    out.getOutputStream().writeInt(volume);
+                });
+
+                if (hasAdd) {
+                    // Standard MCEdit/WorldEdit nibble array: bits 8-11 of the id, the even index
+                    // of each pair in the low nibble
+                    out.writeNamedTagName("AddBlocks", NBTConstants.TYPE_BYTE_ARRAY);
+                    out.getOutputStream().writeInt((volume + 1) >> 1);
+                    final int[] pending = new int[]{-1};
                     clipboard.IMP.streamIds(new NBTStreamer.ByteReader() {
                         @Override
-                        public void run(int index, int byteValue) {
+                        public void run(int index, int id) {
+                            int nibble = (id >> 8) & 0xF;
                             try {
-                                if (byteValue >= 256) {
-                                    hasAdd = true;
+                                if ((index & 1) == 0) {
+                                    pending[0] = nibble;
+                                } else {
+                                    rawStream.writeByte(pending[0] | (nibble << 4));
+                                    pending[0] = -1;
                                 }
-                                if (FaweCache.hasData(byteValue)) {
-                                    hasData = true;
-                                }
-                                if (FaweCache.hasNBT(byteValue)) {
-                                    hasTile = true;
-                                }
-                                rawStream.writeByte(byteValue);
                             } catch (IOException e) {
                                 e.printStackTrace();
                             }
                         }
                     });
+                    if (pending[0] != -1) {
+                        rawStream.writeByte(pending[0]);
+                    }
+                }
 
-                    out.writeNamedTagName("Data", NBTConstants.TYPE_BYTE_ARRAY);
+                if (hasFullAdd) {
+                    // Block ids above 4095 (RoughlyEnoughIDs) do not fit the nibble array. Store
+                    // bits 8-15 of every id as a whole byte; readers that know this tag apply it
+                    // after AddBlocks, others ignore it.
+                    out.writeNamedTagName(ADD_BLOCKS_FULL, NBTConstants.TYPE_BYTE_ARRAY);
                     out.getOutputStream().writeInt(volume);
-                    if (hasData) {
-                        clipboard.IMP.streamDatas(new NBTStreamer.ByteReader() {
-                            @Override
-                            public void run(int index, int byteValue) {
-                                try {
-                                    rawStream.writeByte(byteValue);
-                                } catch (IOException e) {
-                                    e.printStackTrace();
-                                }
+                    clipboard.IMP.streamIds(new NBTStreamer.ByteReader() {
+                        @Override
+                        public void run(int index, int id) {
+                            try {
+                                rawStream.writeByte(id >> 8);
+                            } catch (IOException e) {
+                                e.printStackTrace();
                             }
-                        });
-                    } else {
-                        for (int i = 0; i < volume; i++) {
-                            rawStream.write(0);
                         }
-                    }
+                    });
+                }
 
-                    if (hasAdd) {
-                        out.writeNamedTagName("AddBlocks", NBTConstants.TYPE_BYTE_ARRAY);
-                        int addLength = (volume + 1) >> 1;
-                        out.getOutputStream().writeInt(addLength);
-
-                        final int[] lastAdd = new int[1];
-                        final boolean[] write = new boolean[1];
-
-                        clipboard.IMP.streamIds(new NBTStreamer.ByteReader() {
-                            @Override
-                            public void run(int index, int byteValue) {
-                                if (write[0]) {
-                                    try {
-                                        rawStream.write(((byteValue >> 8) << 4) + (lastAdd[0]));
-                                    } catch (IOException e) {
-                                        e.printStackTrace();
-                                    }
-                                } else {
-                                    lastAdd[0] = byteValue >> 8;
-                                }
-                                write[0] ^= true;
-                            }
-                        });
-                        if (write[0]) {
-                            rawStream.write(lastAdd[0]);
-                        }
-                    }
-
-                    if (hasTile) {
-                        final List<CompoundTag> tileEntities = clipboard.IMP.getTileEntities();
-                        out.writeNamedTag("TileEntities", new ListTag(CompoundTag.class, tileEntities));
-                    } else {
-                        out.writeNamedEmptyList("TileEntities");
-                    }
+                // Tile entities, taken from the clipboard itself: a block-id based check misses
+                // every modded tile entity
+                List<CompoundTag> tileEntities = clipboard.IMP.getTileEntities();
+                if (!tileEntities.isEmpty()) {
+                    out.writeNamedTag("TileEntities", new ListTag(CompoundTag.class, tileEntities));
+                } else {
+                    out.writeNamedEmptyList("TileEntities");
                 }
 
                 if (clipboard.IMP.hasBiomes()) {
@@ -408,6 +352,7 @@ public class SchematicWriter implements ClipboardWriter {
 
         final byte[] blocks = new byte[width * height * length];
         byte[] addBlocks;
+        byte[] addBlocksFull;
         final byte[] blockData = new byte[width * height * length];
         final List<Tag> tileEntities = new ArrayList<Tag>();
         // Precalculate index vars
@@ -425,6 +370,7 @@ public class SchematicWriter implements ClipboardWriter {
             ForEach forEach = new ForEach(yarea, zwidth, blocks, blockData, tileEntities);
             faweClip.forEach(forEach, false);
             addBlocks = forEach.addBlocks;
+            addBlocksFull = forEach.addBlocksFull;
         } else {
             final int mx = min.getBlockX();
             final int my = min.getBlockY();
@@ -438,6 +384,7 @@ public class SchematicWriter implements ClipboardWriter {
                 forEach.run(x, y, z, clipboard.getBlock(point));
             }
             addBlocks = forEach.addBlocks;
+            addBlocksFull = forEach.addBlocksFull;
         }
 
         schematic.put("Blocks", new ByteArrayTag(blocks));
@@ -446,6 +393,9 @@ public class SchematicWriter implements ClipboardWriter {
 
         if (addBlocks != null) {
             schematic.put("AddBlocks", new ByteArrayTag(addBlocks));
+        }
+        if (addBlocksFull != null) {
+            schematic.put(ADD_BLOCKS_FULL, new ByteArrayTag(addBlocksFull));
         }
 
         List<Tag> entities = new ArrayList<Tag>();

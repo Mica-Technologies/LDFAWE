@@ -1,5 +1,6 @@
 package com.boydti.fawe.jnbt;
 
+import com.sk89q.worldedit.extent.clipboard.io.SchematicWriter;
 import com.boydti.fawe.config.Settings;
 import com.boydti.fawe.object.RunnableVal2;
 import com.boydti.fawe.object.clipboard.CPUOptimizedClipboard;
@@ -42,6 +43,7 @@ public class SchematicStreamer extends NBTStreamer {
         addReader("Schematic.Blocks.?", initializer);
         addReader("Schematic.Data.?", initializer);
         addReader("Schematic.AddBlocks.?", initializer2);
+        addReader("Schematic." + SchematicWriter.ADD_BLOCKS_FULL + ".?", initializer);
         addReader("Schematic.Blocks.#", new ByteReader() {
             @Override
             public void run(int index, int value) {
@@ -64,6 +66,13 @@ public class SchematicStreamer extends NBTStreamer {
                     if (first != 0) fc.setAdd(gIndex, first);
                     if (second != 0) fc.setAdd(gIndex + 1, second);
                 }
+            }
+        });
+        // Bits 8-15 of each id, for block ids above 4095 (written after AddBlocks, so it wins)
+        addReader("Schematic." + SchematicWriter.ADD_BLOCKS_FULL + ".#", new ByteReader() {
+            @Override
+            public void run(int index, int value) {
+                if (value != 0) fc.setAdd(index, value);
             }
         });
         ByteReader biomeReader = new ByteReader() {

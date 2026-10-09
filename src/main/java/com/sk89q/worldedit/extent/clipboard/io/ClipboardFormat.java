@@ -280,19 +280,14 @@ public enum ClipboardFormat {
         map.put("creator", user);
         if (clipboard instanceof BlockArrayClipboard) {
             FaweClipboard fc = ((BlockArrayClipboard) clipboard).IMP;
-            final int[] ids = new int[4096];
+            // streamIds gives full block ids, which go past 4095 with extended ids
+            final Map<Integer, Integer> blocks = new HashMap<Integer, Integer>();
             fc.streamIds(new NBTStreamer.ByteReader() {
                 @Override
-                public void run(int index, int byteValue) {
-                    ids[byteValue]++;
+                public void run(int index, int id) {
+                    blocks.merge(id, 1, Integer::sum);
                 }
             });
-            Map<Integer, Integer> blocks = new HashMap<Integer, Integer>();
-            for (int i = 0; i < ids.length; i++) {
-                if (ids[i] != 0) {
-                    blocks.put(i, ids[i]);
-                }
-            }
             map.put("blocks", blocks);
         }
         Gson gson = new Gson();
@@ -333,7 +328,7 @@ public enum ClipboardFormat {
             MultiClipboardHolder clipboards = loadAllFromUrl(url, worldData);
             return clipboards;
         } else {
-            if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matcher(input).find() && !player.hasPermission("worldedit.schematic.load.other")) {
+            if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", Pattern.CASE_INSENSITIVE).matcher(input).find() && !player.hasPermission("worldedit.schematic.load.other")) {
                 BBC.NO_PERM.send(player, "worldedit.schematic.load.other");
                 return null;
             }
@@ -353,7 +348,7 @@ public enum ClipboardFormat {
                     return null;
                 }
             } else {
-                if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matcher(input).find() && !player.hasPermission("worldedit.schematic.load.other")) {
+                if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", Pattern.CASE_INSENSITIVE).matcher(input).find() && !player.hasPermission("worldedit.schematic.load.other")) {
                     if (message) BBC.NO_PERM.send(player, "worldedit.schematic.load.other");
                     return null;
                 }
@@ -384,6 +379,10 @@ public enum ClipboardFormat {
                 if (message) BBC.SCHEMATIC_NOT_FOUND.send(player, input);
                 return null;
             }
+            if (!f.isDirectory() && format != null && !format.isReadable()) {
+                if (message) BBC.CLIPBOARD_INVALID_FORMAT.send(player, f.getName());
+                return null;
+            }
             if (!f.isDirectory()) {
                 ByteSource source = Files.asByteSource(f);
                 URI uri = f.toURI();
@@ -403,7 +402,11 @@ public enum ClipboardFormat {
         File[] files = dir.listFiles(pathname -> {
             String input = pathname.getName();
             String extension = input.substring(input.lastIndexOf('.') + 1, input.length());
-            return (extensions.contains(extension.toLowerCase()));
+            if (!extensions.contains(extension.toLowerCase())) {
+                return false;
+            }
+            ClipboardFormat format = findByExtension(extension);
+            return format == null || format.isReadable();
         });
         LazyClipboardHolder[] clipboards = new LazyClipboardHolder[files.length];
         for (int i = 0; i < files.length; i++) {
@@ -425,8 +428,8 @@ public enum ClipboardFormat {
                     while ((entry = zip.getNextEntry()) != null) {
                         String filename = entry.getName();
                         String extension = filename.substring(filename.lastIndexOf('.') + 1, filename.length());
-                        ClipboardFormat format = findByExtension(filename);
-                        if (format != null) {
+                        ClipboardFormat format = findByExtension(extension);
+                        if (format != null && format.isReadable()) {
                             FastByteArrayOutputStream out = new FastByteArrayOutputStream();
                             int len = 0;
                             while ((len = zip.read(buffer)) > 0) {
@@ -485,6 +488,13 @@ public enum ClipboardFormat {
      */
     public Set<String> getAliases() {
         return format.getAliases();
+    }
+
+    /**
+     * @return whether clipboards can be loaded from this format (PNG renders are write-only)
+     */
+    public boolean isReadable() {
+        return this != PNG;
     }
 
     /**

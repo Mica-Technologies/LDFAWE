@@ -449,16 +449,19 @@ public class ClipboardRemapper {
         return remapData[data];
     }
 
+    // Mappings only cover vanilla ids; anything beyond the tables (modded ids above 4095) is
+    // passed through unchanged
+
     public boolean hasRemapId(int id) {
-        return remapAnyIds[id];
+        return id >= 0 && id < remapAnyIds.length && remapAnyIds[id];
     }
 
     public boolean hasRemap(int id) {
-        return remapIds[id];
+        return id >= 0 && id < remapIds.length && remapIds[id];
     }
 
     public int remapId(int id) {
-        if (remapAllIds[id]) {
+        if (id >= 0 && id < remapAllIds.length && remapAllIds[id]) {
             return remapCombined[id << 4] >> 4;
         }
         return id;
@@ -500,10 +503,13 @@ public class ClipboardRemapper {
 
     public BaseBlock remap(BaseBlock block) {
         int combined = block.getCombined();
-        if (remap[combined]) {
+        if (combined >= 0 && combined < remap.length && remap[combined]) {
             char value = remapCombined[combined];
             BaseBlock newBlock = FaweCache.getBlock(value);
-            newBlock.setNbtData(block.getNbtData());
+            if (block.getNbtData() != null) {
+                // Cached blocks are shared; never attach NBT to one
+                newBlock = new BaseBlock(newBlock.getId(), newBlock.getData(), block.getNbtData());
+            }
             return newBlock;
         }
         return block;

@@ -200,7 +200,7 @@ public class FaweFormat implements ClipboardReader, ClipboardWriter {
                     if (from) {
                         in.skip(2);
                     }
-                    int combined = in.readShort();
+                    int combined = in.readUnsignedShort();
                     int id = FaweCache.getId(combined);
                     int data = FaweCache.getData(combined);
                     BaseBlock block = FaweCache.getBlock(id, data);
@@ -264,7 +264,17 @@ public class FaweFormat implements ClipboardReader, ClipboardWriter {
         Vector max = clipboard.getMaximumPoint();
         Vector origin = clipboard.getOrigin().subtract(min);
 
-        // Mode
+        // Mode. Modes 0-3 store combined ids in 16 bits; a clipboard holding block ids above 4095
+        // is written in mode 5 (32-bit ids) instead of being clamped.
+        int mode = this.mode;
+        if (mode != 5) {
+            for (Vector pt : clipboard.getRegion()) {
+                if (clipboard.getBlock(pt).getId() > 4095) {
+                    mode = 5;
+                    break;
+                }
+            }
+        }
         out.write(mode);
         ArrayDeque<CompoundTag> tiles = new ArrayDeque<>();
         boolean from = false;
@@ -394,10 +404,12 @@ public class FaweFormat implements ClipboardReader, ClipboardWriter {
         for (Entity entity : clipboard.getEntities()) {
             BaseEntity state = entity.getState();
             if (state != null) {
-                CompoundTag entityTag = state.getNbtData();
+                // A copy, and positions relative to the region's minimum corner: blocks are stored
+                // that way and the reader places entities relative to a region starting at 0
+                CompoundTag entityTag = state.getNbtData().createBuilder().build();
                 Map<String, Tag> map = ReflectionUtils.getMap(entityTag.getValue());
                 map.put("id", new StringTag(state.getTypeId()));
-                map.put("Pos", writeVector(entity.getLocation().toVector(), "Pos"));
+                map.put("Pos", writeVector(entity.getLocation().toVector().subtract(min), "Pos"));
                 map.put("Rotation", writeRotation(entity.getLocation(), "Rotation"));
                 out.writeNBT("", entityTag);
             }
