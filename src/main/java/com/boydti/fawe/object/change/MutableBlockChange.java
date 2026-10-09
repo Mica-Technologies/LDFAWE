@@ -14,11 +14,11 @@ public class MutableBlockChange implements Change {
     public int z;
     public int y;
     public int x;
-    public short id;
+    public int id;
     public byte data;
 
 
-    public MutableBlockChange(int x, int y, int z, short id, byte data) {
+    public MutableBlockChange(int x, int y, int z, int id, byte data) {
         this.x = x;
         this.y = y;
         this.z = z;

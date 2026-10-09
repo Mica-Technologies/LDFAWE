@@ -8,6 +8,7 @@ import com.boydti.fawe.object.FaweInputStream;
 import com.boydti.fawe.object.FawePlayer;
 import com.boydti.fawe.object.IntegerPair;
 import com.boydti.fawe.object.RegionWrapper;
+import com.boydti.fawe.object.change.MutableBlockChange;
 import com.boydti.fawe.util.MainUtil;
 import com.sk89q.jnbt.NBTInputStream;
 import com.sk89q.jnbt.NBTOutputStream;
@@ -21,6 +22,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.UUID;
 
@@ -387,34 +390,23 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
             if ((ox != 0 || oz != 0) && !requiredRegion.isIn(ox, oz)) {
                 return new DiskStorageSummary(ox, oz);
             }
-            try (FileInputStream fis = new FileInputStream(bdFile)) {
-                FaweInputStream gis = MainUtil.getCompressedIS(fis);
-                // skip mode
-                gis.skipFully(1);
-                // origin
-                ox = ((gis.read() << 24) + (gis.read() << 16) + (gis.read() << 8) + (gis.read() << 0));
-                oz = ((gis.read() << 24) + (gis.read() << 16) + (gis.read() << 8) + (gis.read() << 0));
-                setOrigin(ox, oz);
+            try (FaweInputStream gis = getBlockIS()) {
+                if (gis == null) {
+                    return null;
+                }
+                ox = getOriginX();
+                oz = getOriginZ();
                 DiskStorageSummary summary = new DiskStorageSummary(ox, oz);
-                if (!requiredRegion.isIn(ox, oz)) {
-                    fis.close();
-                    gis.close();
+                if (!requiredRegion.isIn(ox, oz) || shallow) {
                     return summary;
                 }
-                byte[] buffer = new byte[9];
-                int i = 0;
+                // Decode with the same delegates undo uses, so every history mode (and the wide-id
+                // modes) is read correctly. Only a bounded prefix is sampled.
+                Iterator<MutableBlockChange> iter = getBlockIterator(gis, true);
                 int amount = (Settings.IMP.HISTORY.BUFFER_SIZE - HEADER_SIZE) / 9;
-                while (!shallow && ++i < amount) {
-                    if (gis.read(buffer) == -1) {
-                        fis.close();
-                        gis.close();
-                        return summary;
-                    }
-                    int x = ((byte) buffer[0] & 0xFF) + ((byte) buffer[1] << 8) + ox;
-                    int z = ((byte) buffer[2] & 0xFF) + ((byte) buffer[3] << 8) + oz;
-                    int combined1 = buffer[7] & 0xFF;
-                    int combined2 = buffer[8] & 0xFF;
-                    summary.add(x, z, ((combined2 << 4) + (combined1 >> 4)));
+                for (int i = 0; i < amount && iter.hasNext(); i++) {
+                    MutableBlockChange change = iter.next();
+                    summary.add(change.x, change.z, change.id);
                 }
                 return summary;
             } catch (IOException e) {
@@ -449,7 +441,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
 
         private final int z;
         private final int x;
-        public int[] blocks;
+        private final HashMap<Integer, Integer> blocks = new HashMap<>();
 
         public int minX;
         public int minZ;
@@ -458,7 +450,6 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         public int maxZ;
 
         public DiskStorageSummary(int x, int z) {
-            blocks = new int[256];
             this.x = x;
             this.z = z;
             minX = x;
@@ -468,7 +459,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         }
 
         public void add(int x, int z, int id) {
-            blocks[id]++;
+            blocks.merge(id, 1, Integer::sum);
             if (x < minX) {
                 minX = x;
             } else if (x > maxX) {
@@ -482,13 +473,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         }
 
         public Map<Integer, Integer> getBlocks() {
-            Int2ObjectOpenHashMap<Integer> map = new Int2ObjectOpenHashMap<>();
-            for (int i = 0; i < blocks.length; i++) {
-                if (blocks[i] != 0) {
-                    map.put(i, (Integer) blocks[i]);
-                }
-            }
-            return map;
+            return new HashMap<>(blocks);
         }
 
         public Map<Integer, Double> getPercents() {
@@ -506,8 +491,8 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
 
         public int getSize() {
             int count = 0;
-            for (int i = 0; i < blocks.length; i++) {
-                count += blocks[i];
+            for (int value : blocks.values()) {
+                count += value;
             }
             return count;
         }

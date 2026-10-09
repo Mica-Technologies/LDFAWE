@@ -54,6 +54,14 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
         init(storeRedo, smallLoc);
     }
 
+    /**
+     * Flag OR'd into the mode byte of the stream header when each combined block id is stored as a
+     * 4-byte int. Combined ids are {@code (id << 4) | data}, so any block id above 4095 (common with
+     * RoughlyEnoughIDs) does not fit the 2 bytes the original modes 1-4 use. Streams written without
+     * the flag are still read with the 2-byte layout.
+     */
+    public static final int MODE_WIDE_IDS = 0x10;
+
     private void init(boolean storeRedo, boolean smallLoc) {
         if (storeRedo) {
             if (smallLoc) {
@@ -66,6 +74,7 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
         } else {
             mode = 2;
         }
+        mode |= MODE_WIDE_IDS;
     }
 
     public interface FaweStreamPositionDelegate {
@@ -86,9 +95,79 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
         void readCombined(FaweInputStream in, MutableFullBlockChange change, boolean dir) throws IOException;
     }
 
+    private static void writeInt(OutputStream stream, int value) throws IOException {
+        stream.write(value & 0xff);
+        stream.write((value >> 8) & 0xff);
+        stream.write((value >> 16) & 0xff);
+        stream.write((value >>> 24) & 0xff);
+    }
+
+    private static int readInt(FaweInputStream is) throws IOException {
+        int b1 = is.read();
+        int b2 = is.read();
+        int b3 = is.read();
+        int b4 = is.read();
+        if ((b1 | b2 | b3 | b4) < 0) {
+            throw new EOFException();
+        }
+        return b1 + (b2 << 8) + (b3 << 16) + (b4 << 24);
+    }
+
+    private static int readChar(FaweInputStream is) throws IOException {
+        int b1 = is.read();
+        int b2 = is.read();
+        if ((b1 | b2) < 0) {
+            throw new EOFException();
+        }
+        return b1 + (b2 << 8);
+    }
+
     private void setupStreamDelegates(int mode) {
         this.mode = mode;
-        if (mode == 3 || mode == 4) {
+        boolean wide = (mode & MODE_WIDE_IDS) != 0;
+        int baseMode = mode & 0x0F;
+        if (wide) {
+            final boolean storeRedo = baseMode == 3 || baseMode == 4;
+            idDel = new FaweStreamIdDelegate() {
+                @Override
+                public void writeChange(OutputStream stream, int combinedFrom, int combinedTo) throws IOException {
+                    writeInt(stream, combinedFrom);
+                    if (storeRedo) {
+                        writeInt(stream, combinedTo);
+                    }
+                }
+
+                @Override
+                public void readCombined(FaweInputStream is, MutableBlockChange change, boolean dir) throws IOException {
+                    int combined;
+                    if (storeRedo && dir) {
+                        is.skipFully(4);
+                        combined = readInt(is);
+                    } else {
+                        combined = readInt(is);
+                        if (storeRedo) {
+                            is.skipFully(4);
+                        }
+                    }
+                    change.id = combined >>> 4;
+                    change.data = (byte) (combined & 0xf);
+                }
+
+                @Override
+                public void readCombined(FaweInputStream is, MutableFullBlockChange change, boolean dir) throws IOException {
+                    int from = readInt(is);
+                    int to = storeRedo ? readInt(is) : 0;
+                    // The change places `from` and gives `to` back to the block bag, so a redo swaps them.
+                    if (dir && storeRedo) {
+                        change.from = to;
+                        change.to = from;
+                    } else {
+                        change.from = from;
+                        change.to = to;
+                    }
+                }
+            };
+        } else if (baseMode == 3 || baseMode == 4) {
             idDel = new FaweStreamIdDelegate() {
                 @Override
                 public void writeChange(OutputStream stream, int combinedFrom, int combinedTo) throws IOException {
@@ -104,21 +183,24 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
                         is.skipFully(2);
                         int to1 = is.read();
                         int to2 = is.read();
-                        change.id = (short) ((to2 << 4) + (to1 >> 4));
+                        change.id = (to2 << 4) + (to1 >> 4);
                         change.data = (byte) (to1 & 0xf);
                     } else {
                         int from1 = is.read();
                         int from2 = is.read();
                         is.skipFully(2);
-                        change.id = (short) ((from2 << 4) + (from1 >> 4));
+                        change.id = (from2 << 4) + (from1 >> 4);
                         change.data = (byte) (from1 & 0xf);
                     }
                 }
 
                 @Override
                 public void readCombined(FaweInputStream is, MutableFullBlockChange change, boolean dir) throws IOException {
-                    change.from = ((byte) is.read() & 0xFF) + ((byte) is.read() << 8);
-                    change.to = ((byte) is.read() & 0xFF) + ((byte) is.read() << 8);
+                    int from = readChar(is);
+                    int to = readChar(is);
+                    // The change places `from` and gives `to` back to the block bag, so a redo swaps them.
+                    change.from = dir ? to : from;
+                    change.to = dir ? from : to;
                 }
             };
         } else {
@@ -133,18 +215,18 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
                 public void readCombined(FaweInputStream in, MutableBlockChange change, boolean dir) throws IOException {
                     int from1 = in.read();
                     int from2 = in.read();
-                    change.id = (short) ((from2 << 4) + (from1 >> 4));
+                    change.id = (from2 << 4) + (from1 >> 4);
                     change.data = (byte) (from1 & 0xf);
                 }
 
                 @Override
                 public void readCombined(FaweInputStream is, MutableFullBlockChange change, boolean dir) throws IOException {
-                    change.from = ((byte) is.read() & 0xFF) + ((byte) is.read() << 8);
+                    change.from = readChar(is);
                     change.to = 0;
                 }
             };
         }
-        if (mode == 1 || mode == 4) { // small
+        if (baseMode == 1 || baseMode == 4) { // small
             posDel = new FaweStreamPositionDelegate() {
                 int lx, ly, lz;
 
@@ -405,11 +487,18 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
     }
 
     public Iterator<MutableBlockChange> getBlockIterator(final boolean dir) throws IOException {
-        final FaweInputStream is = getBlockIS();
+        return getBlockIterator(getBlockIS(), dir);
+    }
+
+    /**
+     * Iterate the block changes of a stream already positioned after its header (as returned by
+     * {@link #getBlockIS()}). The iterator closes the stream once it is exhausted.
+     */
+    public Iterator<MutableBlockChange> getBlockIterator(final FaweInputStream is, final boolean dir) {
         if (is == null) {
             return new ArrayList<MutableBlockChange>().iterator();
         }
-        final MutableBlockChange change = new MutableBlockChange(0, 0, 0, (short) 0, (byte) 0);
+        final MutableBlockChange change = new MutableBlockChange(0, 0, 0, 0, (byte) 0);
         return new Iterator<MutableBlockChange>() {
             private MutableBlockChange last = read();
 

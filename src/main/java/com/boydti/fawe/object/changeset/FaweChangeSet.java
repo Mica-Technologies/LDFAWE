@@ -3,6 +3,7 @@ package com.boydti.fawe.object.changeset;
 import com.boydti.fawe.Fawe;
 import com.boydti.fawe.FaweAPI;
 import com.boydti.fawe.FaweCache;
+import com.boydti.fawe.example.CharFaweChunk;
 import com.boydti.fawe.config.Settings;
 import com.boydti.fawe.logging.rollback.RollbackOptimizedHistory;
 import com.boydti.fawe.object.FaweChunk;
@@ -307,11 +308,18 @@ public abstract class FaweChangeSet implements ChangeSet {
                                                         continue;
                                                     case 1:
                                                         combinedIdCurrent = 0;
-                                                    default:
-                                                        char combinedIdPrevious = previousLayer != null ? previousLayer[index] : 0;
-                                                        if (combinedIdCurrent != combinedIdPrevious) {
-                                                            add(xx, yy, zz, combinedIdPrevious, combinedIdCurrent);
-                                                        }
+                                                        break;
+                                                    case CharFaweChunk.OVERFLOW_SENTINEL:
+                                                        // Ids above 4095 live in the chunk's overflow map
+                                                        combinedIdCurrent = next.getBlockCombinedId(x, yy, z);
+                                                        break;
+                                                }
+                                                int combinedIdPrevious = previousLayer != null ? previousLayer[index] : 0;
+                                                if (combinedIdPrevious == CharFaweChunk.OVERFLOW_SENTINEL) {
+                                                    combinedIdPrevious = previous.getBlockCombinedId(x, yy, z);
+                                                }
+                                                if (combinedIdCurrent != combinedIdPrevious) {
+                                                    add(xx, yy, zz, combinedIdPrevious, combinedIdCurrent);
                                                 }
                                             }
                                         }
