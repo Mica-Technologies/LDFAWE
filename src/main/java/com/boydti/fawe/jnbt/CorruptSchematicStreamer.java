@@ -103,19 +103,19 @@ public class CorruptSchematicStreamer {
             match("Width", new CorruptSchematicStreamer.CorruptReader() {
                 @Override
                 public void run(DataInputStream in) throws IOException {
-                    width.set(in.readShort());
+                    width.set(in.readUnsignedShort());
                 }
             });
             match("Height", new CorruptSchematicStreamer.CorruptReader() {
                 @Override
                 public void run(DataInputStream in) throws IOException {
-                    height.set(in.readShort());
+                    height.set(in.readUnsignedShort());
                 }
             });
             match("Length", new CorruptSchematicStreamer.CorruptReader() {
                 @Override
                 public void run(DataInputStream in) throws IOException {
-                    length.set(in.readShort());
+                    length.set(in.readUnsignedShort());
                 }
             });
             match("WEOffsetX", new CorruptSchematicStreamer.CorruptReader() {

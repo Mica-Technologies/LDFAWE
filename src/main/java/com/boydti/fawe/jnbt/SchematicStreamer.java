@@ -128,19 +128,19 @@ public class SchematicStreamer extends NBTStreamer {
         addReader("Schematic.Height", new RunnableVal2<Integer, Short>() {
             @Override
             public void run(Integer index, Short value) {
-                height = (value);
+                height = value & 0xFFFF; // unsigned: dimensions above 32767 are stored as negative shorts
             }
         });
         addReader("Schematic.Width", new RunnableVal2<Integer, Short>() {
             @Override
             public void run(Integer index, Short value) {
-                width = (value);
+                width = value & 0xFFFF; // unsigned: dimensions above 32767 are stored as negative shorts
             }
         });
         addReader("Schematic.Length", new RunnableVal2<Integer, Short>() {
             @Override
             public void run(Integer index, Short value) {
-                length = (value);
+                length = value & 0xFFFF; // unsigned: dimensions above 32767 are stored as negative shorts
             }
         });
         addReader("Schematic.WEOriginX", new RunnableVal2<Integer, Integer>() {
