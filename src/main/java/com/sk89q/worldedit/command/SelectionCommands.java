@@ -240,9 +240,17 @@ public class SelectionCommands {
                 String[] coords = args.getString(0).split(",");
                 if (coords.length != 2) {
                     BBC.SELECTOR_INVALID_COORDINATES.send(player, args.getString(0));
+                    return;
                 }
-                int x = Integer.parseInt(coords[0]);
-                int z = Integer.parseInt(coords[1]);
+                int x;
+                int z;
+                try {
+                    x = Integer.parseInt(coords[0].trim());
+                    z = Integer.parseInt(coords[1].trim());
+                } catch (NumberFormatException e) {
+                    BBC.SELECTOR_INVALID_COORDINATES.send(player, args.getString(0));
+                    return;
+                }
                 Vector2D pos = new Vector2D(x, z);
                 min2D = (args.hasFlag('c')) ? pos : ChunkStore.toChunk(pos.toVector());
             } else {

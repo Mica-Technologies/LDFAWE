@@ -227,7 +227,7 @@ public abstract class FawePlayer<T> extends Metadatable {
             if (region != null) {
                 Vector min = region.getMinimumPoint().toBlockVector();
                 Vector max = region.getMaximumPoint().toBlockVector();
-                long area = (long) ((max.getX() - min.getX()) * (max.getZ() - min.getZ() + 1)) * times;
+                long area = (long) ((max.getX() - min.getX() + 1) * (max.getZ() - min.getZ() + 1)) * times;
                 if (area > 2 << 18) {
                     setConfirmTask(task, context, command);
                     long volume = (long) max.subtract(min).add(Vector.ONE).volume() * times;
@@ -243,7 +243,7 @@ public abstract class FawePlayer<T> extends Metadatable {
             if (region != null) {
                 Vector min = region.getMinimumPoint().toBlockVector();
                 Vector max = region.getMaximumPoint().toBlockVector();
-                long area = (long) ((max.getX() - min.getX()) * (max.getZ() - min.getZ() + 1));
+                long area = (long) ((max.getX() - min.getX() + 1) * (max.getZ() - min.getZ() + 1));
                 if (area > 2 << 18) {
                     setConfirmTask(task, context, command);
                     long volume = (long) max.subtract(min).add(Vector.ONE).volume();

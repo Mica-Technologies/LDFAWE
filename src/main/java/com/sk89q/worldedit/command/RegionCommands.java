@@ -463,13 +463,17 @@ public class RegionCommands extends MethodCommands {
             min = 0,
             max = 2
     )
-    @CommandPermissions("worldedit.region.smoothsnow")
+    @CommandPermissions("worldedit.region.smooth")
     @Logging(REGION)
     public void smooth(FawePlayer player, EditSession editSession, @Selection Region region, @Optional("1") int iterations, @Switch('n') boolean affectNatural, @Switch('s') boolean snow, CommandContext context) throws WorldEditException {
         Vector min = region.getMinimumPoint();
         Vector max = region.getMaximumPoint();
         long volume = (((long) max.getX() - (long) min.getX() + 1) * ((long) max.getY() - (long) min.getY() + 1) * ((long) max.getZ() - (long) min.getZ() + 1));
         FaweLimit limit = FawePlayer.wrap(player).getLimit();
+        if (snow && !player.hasPermission("worldedit.region.smoothsnow")) {
+            BBC.NO_PERM.send(player, "worldedit.region.smoothsnow");
+            return;
+        }
         if (volume >= limit.MAX_CHECKS) {
             throw new FaweException(BBC.WORLDEDIT_CANCEL_REASON_MAX_CHECKS);
         }
@@ -711,17 +715,18 @@ public class RegionCommands extends MethodCommands {
                 biome = Biomes.findBiomeByName(knownBiomes, args.getString(0), biomeRegistry);
             }
             Long seed = args.argsLength() != 2 || !MathMan.isInteger(args.getString(1)) ? null : Long.parseLong(args.getString(1));
-            editSession.regenerate(region, biome, seed);
-            session.setMask(mask);
-            session.setSourceMask(mask);
-            if (!player.hasPermission("fawe.tips")) {
-                BBC.COMMAND_REGEN_2.send(player);
-            } else if (biome == null) {
+            try {
+                editSession.regenerate(region, biome, seed);
+            } finally {
+                session.setMask(mask);
+                session.setSourceMask(sourceMask);
+            }
+            if (biome == null) {
                 BBC.COMMAND_REGEN_0.send(player);
-                if (!FawePlayer.wrap(player).hasPermission("fawe.tips")) BBC.TIP_REGEN_0.send(player);
+                if (!player.hasPermission("fawe.tips")) BBC.TIP_REGEN_0.send(player);
             } else if (seed == null) {
                 BBC.COMMAND_REGEN_1.send(player);
-                if (!FawePlayer.wrap(player).hasPermission("fawe.tips")) BBC.TIP_REGEN_1.send(player);
+                if (!player.hasPermission("fawe.tips")) BBC.TIP_REGEN_1.send(player);
             } else {
                 BBC.COMMAND_REGEN_2.send(player);
             }
