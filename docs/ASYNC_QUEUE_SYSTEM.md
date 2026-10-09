@@ -40,9 +40,38 @@ FaweQueue (interface)
 
 ### Threading Model
 
-- **Main server thread** — Chunk application (NMS operations must happen here)
-- **Async worker threads** — Pattern evaluation, mask checking, region iteration, history recording
-- **`Settings.IMP.QUEUE.PARALLEL_THREADS`** — Controls worker thread count (set to 1 when Sponge is detected)
+- **Main server thread** — `SetQueue` dispatches chunks from here. Everything that touches world-wide
+  state runs here too: `ForgeChunk_All.start()` settles the UUIDs of entities to spawn, and
+  `ForgeQueue_All.end()` calls `ForgeChunk_All.applyOnMainThread()`, which invalidates replaced tile
+  entities, removes and spawns entities, loads tile-entity NBT and recomputes the heightmap before the
+  chunk is sent. Chunk packets are always built and sent on this thread.
+- **ForkJoin workers** (`QUEUE.PARALLEL_THREADS`) — `ForgeChunk_All.call()` writes only chunk-local
+  storage (block sections, light) and *collects* the world-wide work above; it must never spawn,
+  remove or invalidate anything itself, because several chunks run at once.
+- **Async command threads** — Pattern evaluation, mask checking, region iteration, history recording.
+  `FaweQueue.flush()` blocks the command thread until the queue has left the ACTIVE stage, because the
+  edit's change set is closed as soon as it returns. When too many queues are active, `SetQueue.enqueue()`
+  makes the producer wait (never on the main thread) rather than applying a queue off-thread.
+
+### Block updates
+
+Edits made through the queue never cause block updates: sections are written directly and the chunk
+is resent, so no `neighborChanged`, `onBlockAdded`, `breakBlock` or redstone/physics recalculation
+runs. This is relied on in practice, for example to remove Railcraft or Charset wire networks without
+the network recalculation crashing the server. The only per-block hook that still runs is
+`TileEntity#invalidate()` for tile entities that are replaced or removed (on the main thread), which is
+how mods learn their tile entity is gone. Keep it that way: do not add neighbour notifications to the
+queue path.
+
+### Block ids above 4095
+
+With RoughlyEnoughIDs, block ids can exceed 4095, so combined ids (`id << 4 | data`) exceed 16 bits.
+`CharFaweChunk` keeps 16-bit `char` sections and stores such blocks as the placeholder `0xFFFF` with the
+real value in a sparse `overflowIds` map; anything reading the raw arrays must resolve the placeholder
+through `getBlockCombinedId()` (a real 4095:15 block is `0xFFFF` without a map entry). History streams
+store 32-bit ids (`FaweStreamChangeSet.MODE_WIDE_IDS`), the disk clipboard has an `.overflow` sidecar,
+`.schematic` files carry an extra `AddBlocksFull` array, and snapshot restore decodes REID's palette
+sections (`ChunkSectionDecoder`). Lookup tables indexed by id must bounds-check or use sets/maps.
 
 ### Chunk Sections
 
