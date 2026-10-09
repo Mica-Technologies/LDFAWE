@@ -76,24 +76,43 @@ public class NMSRelighter implements Relighter {
         long value = m2[y >> 6] |= 1L << (y & 63);
     }
 
+    /*
+     * lightQueue is guarded by lightLock alone: whoever wins the CAS may touch it. Producers
+     * (queue workers placing blocks) never wait: if the lock is busy they record the update
+     * in concurrentLightQueue instead, using compute() so the write is atomic with respect to
+     * the remove() that drains it. fixBlockLighting() waits for the lock (producers only hold
+     * it briefly and never take another lock while holding it) and then keeps draining
+     * concurrentLightQueue until both maps are empty, so no update is skipped or lost.
+     */
+    private void acquireLightLock() {
+        while (!lightLock.compareAndSet(false, true)) {
+            Thread.yield();
+        }
+    }
+
     public void addLightUpdate(int x, int y, int z) {
         long index = MathMan.pairInt(x >> 4, z >> 4);
+        int lx = x & 15;
+        int lz = z & 15;
         if (lightLock.compareAndSet(false, true)) {
-            synchronized (lightQueue) {
-                try {
-                    long[][][] currentMap = lightQueue.get(index);
-                    if (currentMap == null) {
-                        currentMap = new long[16][][];
-                        this.lightQueue.put(index, currentMap);
-                    }
-                    set(x & 15, y, z & 15, currentMap);
-                } finally {
-                    lightLock.set(false);
+            try {
+                long[][][] currentMap = lightQueue.get(index);
+                if (currentMap == null) {
+                    currentMap = new long[16][][];
+                    this.lightQueue.put(index, currentMap);
                 }
+                set(lx, y, lz, currentMap);
+            } finally {
+                lightLock.set(false);
             }
         } else {
-            long[][][] currentMap = concurrentLightQueue.computeIfAbsent(index, k -> new long[16][][]);
-            set(x & 15, y, z & 15, currentMap);
+            concurrentLightQueue.compute(index, (k, currentMap) -> {
+                if (currentMap == null) {
+                    currentMap = new long[16][][];
+                }
+                set(lx, y, lz, currentMap);
+                return currentMap;
+            });
         }
     }
 
@@ -101,7 +120,12 @@ public class NMSRelighter implements Relighter {
         queuedSkyToRelight.clear();
         skyToRelight.clear();
         chunksToSend.clear();
-        lightQueue.clear();
+        acquireLightLock();
+        try {
+            lightQueue.clear();
+        } finally {
+            lightLock.set(false);
+        }
         concurrentLightQueue.clear();
     }
 
@@ -279,14 +303,21 @@ public class NMSRelighter implements Relighter {
             if (sky) {
                 fixSkyLighting();
             } else {
+                List<RelightSkyEntry> changed = new ArrayList<>();
                 synchronized (this) {
                     Map<Long, RelightSkyEntry> map = getSkyMap();
                     Iterator<Map.Entry<Long, RelightSkyEntry>> iter = map.entrySet().iterator();
                     while (iter.hasNext()) {
                         Map.Entry<Long, RelightSkyEntry> entry = iter.next();
                         chunksToSend.put(entry.getKey(), entry.getValue().bitmask);
+                        changed.add(entry.getValue());
                         iter.remove();
                     }
+                }
+                // Without sky light there is no sky pass to discover new light sources, so
+                // queue every light-emitting block in the edited sections for the block pass.
+                for (RelightSkyEntry chunk : changed) {
+                    queueLightSources(chunk);
                 }
             }
             fixBlockLighting();
@@ -298,24 +329,26 @@ public class NMSRelighter implements Relighter {
 
     public void fixBlockLighting() {
         synchronized (lightQueue) {
-            // Merge any concurrent updates that arrived while lock was held
-            if (!concurrentLightQueue.isEmpty()) {
-                for (Map.Entry<Long, long[][][]> entry : concurrentLightQueue.entrySet()) {
-                    long[][][] existing = lightQueue.get(entry.getKey());
-                    if (existing == null) {
-                        lightQueue.put(entry.getKey(), entry.getValue());
-                    } else {
-                        mergeLightArrays(existing, entry.getValue());
+            acquireLightLock();
+            try {
+                do {
+                    // Move updates recorded while the lock was busy into lightQueue
+                    for (Long key : concurrentLightQueue.keySet()) {
+                        long[][][] pending = concurrentLightQueue.remove(key);
+                        if (pending == null) continue;
+                        long[][][] existing = lightQueue.get(key);
+                        if (existing == null) {
+                            lightQueue.put(key, pending);
+                        } else {
+                            mergeLightArrays(existing, pending);
+                        }
                     }
-                }
-                concurrentLightQueue.clear();
-            }
-            if (lightLock.compareAndSet(false, true)) {
-                try {
-                    updateBlockLight(this.lightQueue);
-                } finally {
-                    lightLock.set(false);
-                }
+                    if (!lightQueue.isEmpty()) {
+                        updateBlockLight(this.lightQueue);
+                    }
+                } while (!concurrentLightQueue.isEmpty() || !lightQueue.isEmpty());
+            } finally {
+                lightLock.set(false);
             }
         }
     }
@@ -365,6 +398,28 @@ public class NMSRelighter implements Relighter {
             }
         };
         TaskManager.IMP.sync(runnable);
+    }
+
+    private void queueLightSources(RelightSkyEntry chunk) {
+        queue.ensureChunkLoaded(chunk.x, chunk.z);
+        Object sections = queue.getCachedSections(queue.getWorld(), chunk.x, chunk.z);
+        if (sections == null) return;
+        int bx = chunk.x << 4;
+        int bz = chunk.z << 4;
+        for (int layer = 0; layer < 16; layer++) {
+            if ((chunk.bitmask & (1 << layer)) == 0) continue;
+            Object section = queue.getCachedSection(sections, layer);
+            if (section == null) continue;
+            int by = layer << 4;
+            for (int j = 0; j < 4096; j++) {
+                int x = j & 15;
+                int z = (j >> 4) & 15;
+                int y = by + (j >> 8);
+                if (queue.getBrightness(section, x, y, z) > 1) {
+                    addLightUpdate(bx + x, y, bz + z);
+                }
+            }
+        }
     }
 
     private boolean isTransparent(int x, int y, int z) {

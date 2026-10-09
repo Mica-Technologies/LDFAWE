@@ -95,6 +95,16 @@ public abstract class NMSMappedFaweQueue<WORLD, CHUNK, CHUNKSECTION, SECTION> ex
                     relight = true;
                 }
             }
+        } else {
+            // No sky light to fix, but placed or removed light sources still need the block
+            // light pass (which also resends the chunk afterwards)
+            for (int i = 0; i < cfc.ids.length; i++) {
+                if (cfc.getCount(i) > 0) {
+                    relight = true;
+                    break;
+                }
+            }
+            fix = null;
         }
         if (relight) {
             getRelighter().addChunk(chunk.getX(), chunk.getZ(), fix, chunk.getBitMask());
