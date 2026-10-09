@@ -233,28 +233,32 @@ public class HistoryCommands extends MethodCommands {
     public void undo(Player player, LocalSession session, CommandContext context) throws WorldEditException {
         int times = Math.max(1, context.getInteger(0, 1));
         FawePlayer.wrap(player).checkConfirmation(() -> {
-            EditSession undone = null;
-            int i = 0;
-            for (; i < times; ++i) {
-                if (context.argsLength() < 2) {
-                    undone = session.undo(session.getBlockBag(player), player);
-                } else {
-                    player.checkPermission("worldedit.history.undo.other");
-                    LocalSession sess = worldEdit.getSessionManager().findByName(context.getString(1));
-                    if (sess == null) {
-                        BBC.COMMAND_HISTORY_OTHER_ERROR.send(player, context.getString(1));
-                        break;
-                    }
-                    undone = sess.undo(session.getBlockBag(player), player);
-                    if (undone == null) break;
+            LocalSession target = session;
+            UUID owner = player.getUniqueId();
+            if (context.argsLength() >= 2) {
+                player.checkPermission("worldedit.history.undo.other");
+                String name = context.getString(1);
+                target = worldEdit.getSessionManager().findByName(name);
+                if (target == null) {
+                    BBC.COMMAND_HISTORY_OTHER_ERROR.send(player, name);
+                    return;
                 }
+                // Load the other player's history, not the history of the player running the command
+                owner = Fawe.imp().getUUID(name);
             }
-            if (undone == null) i--;
-            if (i > 0) {
-                BBC.COMMAND_UNDO_SUCCESS.send(player, i == 1 ? "" : " x" + i);
-                worldEdit.flushBlockBag(player, undone);
+            EditSession lastUndone = null;
+            int count = 0;
+            for (int i = 0; i < times; ++i) {
+                EditSession undone = target.undo(session.getBlockBag(player), player, owner);
+                if (undone == null) break;
+                lastUndone = undone;
+                count++;
             }
-            if (undone == null) {
+            if (count > 0) {
+                BBC.COMMAND_UNDO_SUCCESS.send(player, count == 1 ? "" : " x" + count);
+                worldEdit.flushBlockBag(player, lastUndone);
+            }
+            if (count < times) {
                 BBC.COMMAND_UNDO_ERROR.send(player);
             }
         }, getArguments(context), times, 50, context);
@@ -272,28 +276,32 @@ public class HistoryCommands extends MethodCommands {
 
         int times = Math.max(1, args.getInteger(0, 1));
 
-        EditSession redone = null;
-        int i = 0;
-        for (; i < times; ++i) {
-            if (args.argsLength() < 2) {
-                redone = session.redo(session.getBlockBag(player), player);
-            } else {
-                player.checkPermission("worldedit.history.redo.other");
-                LocalSession sess = worldEdit.getSession(args.getString(1));
-                if (sess == null) {
-                    BBC.COMMAND_HISTORY_OTHER_ERROR.send(player, args.getString(1));
-                    break;
-                }
-                redone = sess.redo(session.getBlockBag(player), player);
-                if (redone == null) break;
+        LocalSession target = session;
+        UUID owner = player.getUniqueId();
+        if (args.argsLength() >= 2) {
+            player.checkPermission("worldedit.history.redo.other");
+            String name = args.getString(1);
+            target = worldEdit.getSession(name);
+            if (target == null) {
+                BBC.COMMAND_HISTORY_OTHER_ERROR.send(player, name);
+                return;
             }
+            // Load the other player's history, not the history of the player running the command
+            owner = Fawe.imp().getUUID(name);
         }
-        if (redone == null) i--;
-        if (i > 0) {
-            BBC.COMMAND_REDO_SUCCESS.send(player, i == 1 ? "" : " x" + i);
-            worldEdit.flushBlockBag(player, redone);
+        EditSession lastRedone = null;
+        int count = 0;
+        for (int i = 0; i < times; ++i) {
+            EditSession redone = target.redo(session.getBlockBag(player), player, owner);
+            if (redone == null) break;
+            lastRedone = redone;
+            count++;
         }
-        if (redone == null) {
+        if (count > 0) {
+            BBC.COMMAND_REDO_SUCCESS.send(player, count == 1 ? "" : " x" + count);
+            worldEdit.flushBlockBag(player, lastRedone);
+        }
+        if (count < times) {
             BBC.COMMAND_REDO_ERROR.send(player);
         }
     }

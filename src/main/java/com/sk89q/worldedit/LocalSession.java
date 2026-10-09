@@ -502,8 +502,21 @@ public class LocalSession implements TextureHolder {
      */
     public EditSession undo(@Nullable BlockBag newBlockBag, Player player) {
         checkNotNull(player);
+        return undo(newBlockBag, player, player.getUniqueId());
+    }
+
+    /**
+     * Performs an undo on this session's history, which may belong to another player.
+     *
+     * @param newBlockBag a new block bag
+     * @param player      the player performing the undo
+     * @param owner       the UUID of the player whose history this session holds
+     * @return the edit session, or null if there was nothing to undo
+     */
+    public EditSession undo(@Nullable BlockBag newBlockBag, Player player, @Nullable UUID owner) {
+        checkNotNull(player);
         FawePlayer fp = FawePlayer.wrap(player);
-        loadSessionHistoryFromDisk(player.getUniqueId(), fp.getWorldForEditing());
+        loadSessionHistoryFromDisk(owner, fp.getWorldForEditing());
         if (getHistoryNegativeIndex() < history.size()) {
             FaweChangeSet changeSet = getChangeSet(history.get(getHistoryIndex()));
             EditSession newEditSession = new EditSessionBuilder(changeSet.getWorld())
@@ -549,8 +562,21 @@ public class LocalSession implements TextureHolder {
      */
     public EditSession redo(@Nullable BlockBag newBlockBag, Player player) {
         checkNotNull(player);
+        return redo(newBlockBag, player, player.getUniqueId());
+    }
+
+    /**
+     * Performs a redo on this session's history, which may belong to another player.
+     *
+     * @param newBlockBag a new block bag
+     * @param player      the player performing the redo
+     * @param owner       the UUID of the player whose history this session holds
+     * @return the edit session, or null if there was nothing to redo
+     */
+    public EditSession redo(@Nullable BlockBag newBlockBag, Player player, @Nullable UUID owner) {
+        checkNotNull(player);
         FawePlayer fp = FawePlayer.wrap(player);
-        loadSessionHistoryFromDisk(player.getUniqueId(), fp.getWorldForEditing());
+        loadSessionHistoryFromDisk(owner, fp.getWorldForEditing());
         if (getHistoryNegativeIndex() > 0) {
             setDirty();
             historyNegativeIndex--;

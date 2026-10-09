@@ -3395,11 +3395,22 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         final Set<Vector2D> chunks = region.getChunks();
         MutableBlockVector mutable = new MutableBlockVector();
         MutableBlockVector2D mutable2D = new MutableBlockVector2D();
+        // History is recorded once the chunk has been regenerated, so redo restores the regenerated terrain
+        // rather than air. Index: (y << 8) | (z << 4) | x, -1 = not part of the regenerated area
+        final int[] historyFrom = fcs != null ? new int[(getMaxY() + 1) << 8] : null;
+        final int[] historyTo = fcs != null ? new int[(getMaxY() + 1) << 8] : null;
+        final Map<Integer, BaseBlock> historyFromTiles = new HashMap<>();
+        final Map<Integer, BaseBlock> historyToTiles = new HashMap<>();
         for (Vector2D chunk : chunks) {
             final int cx = chunk.getBlockX();
             final int cz = chunk.getBlockZ();
             final int bx = cx << 4;
             final int bz = cz << 4;
+            if (fcs != null) {
+                Arrays.fill(historyFrom, -1);
+                historyFromTiles.clear();
+                historyToTiles.clear();
+            }
             final Vector cmin = new Vector(bx, 0, bz);
             final Vector cmax = cmin.add(15, getMaxY(), 15);
             final boolean containsBot1 = (fe == null || fe.contains(cmin.getBlockX(), cmin.getBlockY(), cmin.getBlockZ()));
@@ -3421,15 +3432,12 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                             int zz = z + bz;
                             for (int y = 0; y < getMaxY() + 1; y++) {
                                 int from = queue.getCombinedId4DataDebug(xx, y, zz, 0, EditSession.this);
-                                if (!FaweCache.hasNBT(from >> 4)) {
-                                    fcs.add(xx, y, zz, from, 0);
-                                } else {
+                                int index = (y << 8) | (z << 4) | x;
+                                historyFrom[index] = from;
+                                if (FaweCache.hasNBT(from >> 4)) {
                                     try {
-                                        Vector loc = new Vector(xx, y, zz);
-                                        BaseBlock block = getLazyBlock(loc);
-                                        fcs.add(loc, block, FaweCache.getBlock(0));
-                                    } catch (Throwable e) {
-                                        fcs.add(xx, y, zz, from, 0);
+                                        historyFromTiles.put(index, getLazyBlock(new Vector(xx, y, zz)));
+                                    } catch (Throwable ignore) {
                                     }
                                 }
                             }
@@ -3459,14 +3467,12 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                                 containsAny = true;
                                 if (fcs != null) {
                                     int from = queue.getCombinedId4Data(xx, y, zz);
-                                    if (!FaweCache.hasNBT(from >> 4)) {
-                                        fcs.add(xx, y, zz, from, 0);
-                                    } else {
+                                    int index = (y << 8) | (z << 4) | x;
+                                    historyFrom[index] = from;
+                                    if (FaweCache.hasNBT(from >> 4)) {
                                         try {
-                                            BaseBlock block = getLazyBlock(mutable);
-                                            fcs.add(mutable, block, FaweCache.getBlock(0));
-                                        } catch (Throwable e) {
-                                            fcs.add(xx, y, zz, from, 0);
+                                            historyFromTiles.put(index, getLazyBlock(mutable));
+                                        } catch (Throwable ignore) {
                                         }
                                     }
                                 }
@@ -3492,8 +3498,45 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     @Override
                     public void run(Object value) {
                         queue.regenerateChunk(cx, cz, biome, seed);
+                        if (fcs != null) {
+                            // Read the regenerated blocks straight from the world: the queue may still cache the old chunk
+                            World world = getWorld();
+                            MutableBlockVector pos = new MutableBlockVector();
+                            for (int index = 0; index < historyFrom.length; index++) {
+                                if (historyFrom[index] == -1) continue;
+                                int to = 0;
+                                if (world != null) {
+                                    pos.setComponents(bx + (index & 15), index >> 8, bz + ((index >> 4) & 15));
+                                    BaseBlock block = world.getLazyBlock(pos);
+                                    if (FaweCache.hasNBT(block.getId())) {
+                                        block = world.getBlock(pos);
+                                        historyToTiles.put(index, block);
+                                    }
+                                    to = FaweCache.getCombined(block);
+                                }
+                                historyTo[index] = to;
+                            }
+                        }
                     }
                 });
+                if (fcs != null) {
+                    for (int index = 0; index < historyFrom.length; index++) {
+                        int from = historyFrom[index];
+                        if (from == -1) continue;
+                        int xx = bx + (index & 15);
+                        int y = index >> 8;
+                        int zz = bz + ((index >> 4) & 15);
+                        BaseBlock fromTile = historyFromTiles.get(index);
+                        BaseBlock toTile = historyToTiles.get(index);
+                        if (fromTile == null && toTile == null) {
+                            fcs.add(xx, y, zz, from, historyTo[index]);
+                        } else {
+                            fcs.add(new Vector(xx, y, zz),
+                                    fromTile != null ? fromTile : FaweCache.getBlock(from),
+                                    toTile != null ? toTile : FaweCache.getBlock(historyTo[index]));
+                        }
+                    }
+                }
             }
         }
         if (changes != 0) {
