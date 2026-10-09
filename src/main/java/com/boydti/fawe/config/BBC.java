@@ -18,6 +18,7 @@ import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -386,7 +387,7 @@ public enum BBC {
             this.s = d;
         }
         this.prefix = prefix;
-        this.cat = cat.toLowerCase();
+        this.cat = cat.toLowerCase(Locale.ROOT);
     }
 
     /**
@@ -395,7 +396,7 @@ public enum BBC {
      * @param d default
      */
     BBC(final String d, final String cat) {
-        this(d, true, cat.toLowerCase());
+        this(d, true, cat.toLowerCase(Locale.ROOT));
     }
 
     public String f(final Object... args) {
@@ -430,7 +431,7 @@ public enum BBC {
             final HashSet<String> toRemove = new HashSet<>();
             for (final BBC c : all) {
                 allNames.add(c.name());
-                allCats.add(c.cat.toLowerCase());
+                allCats.add(c.cat.toLowerCase(Locale.ROOT));
             }
             final HashSet<BBC> captions = new HashSet<>();
             boolean changed = false;
@@ -440,13 +441,13 @@ public enum BBC {
                     continue;
                 }
                 final String[] split = key.split("\\.");
-                final String node = split[split.length - 1].toUpperCase();
+                final String node = split[split.length - 1].toUpperCase(Locale.ROOT);
                 final BBC caption = allNames.contains(node) ? valueOf(node) : null;
                 if (caption != null) {
                     if (!split[0].equalsIgnoreCase(caption.cat)) {
                         changed = true;
                         yml.set(key, null);
-                        yml.set(caption.cat + "." + caption.name().toLowerCase(), value);
+                        yml.set(caption.cat + "." + caption.name().toLowerCase(Locale.ROOT), value);
                     }
                     captions.add(caption);
                     caption.s = (String) value;
@@ -461,7 +462,7 @@ public enum BBC {
             for (final BBC caption : all) {
                 if (!captions.contains(caption)) {
                     changed = true;
-                    yml.set(caption.cat + "." + caption.name().toLowerCase(), caption.d);
+                    yml.set(caption.cat + "." + caption.name().toLowerCase(Locale.ROOT), caption.d);
                 }
                 caption.s = StringMan.replaceFromMap(caption.s, replacements);
             }
@@ -667,7 +668,7 @@ public enum BBC {
                     int index = builder.length();
                     if (!Objects.equals(color, newColor)) {
                         style[0] = newColor;
-                        char code = BBC.getCode(newColor.toUpperCase());
+                        char code = BBC.getCode(newColor.toUpperCase(Locale.ROOT));
                         builder.append('\u00A7').append(code);
                     }
                     for (Map.Entry<String, Object> entry2 : obj.entrySet()) {
@@ -675,12 +676,12 @@ public enum BBC {
                             boolean newValue = Boolean.valueOf((String) entry2.getValue());
                             if (properties.put(entry2.getKey(), newValue) != newValue) {
                                 if (newValue) {
-                                    char code = BBC.getCode(entry2.getKey().toUpperCase());
+                                    char code = BBC.getCode(entry2.getKey().toUpperCase(Locale.ROOT));
                                     builder.append('\u00A7').append(code);
                                 } else {
                                     builder.insert(index, '\u00A7').append('r');
                                     if (Objects.equals(color, newColor) && newColor != null) {
-                                        builder.append('\u00A7').append(BBC.getCode(newColor.toUpperCase()));
+                                        builder.append('\u00A7').append(BBC.getCode(newColor.toUpperCase(Locale.ROOT)));
                                     }
                                 }
                             }
