@@ -183,6 +183,9 @@ public class ClipboardCommands extends MethodCommands {
                 copy.setSourceMask(sourceMask == null ? mask : new MaskIntersection(sourceMask, mask));
             }
             Operations.completeBlindly(copy);
+            // Write a disk clipboard's sidecars (tile entities, entities, ids above 4095) now, so
+            // the copy survives a crash or restart, not only an orderly logout
+            clipboard.IMP.flush();
             BBC.COMMAND_COPY.send(player, region.getArea());
             if (!FawePlayer.wrap(player).hasPermission("fawe.tips"))
                 BBC.TIP_PASTE.or(BBC.TIP_DOWNLOAD, BBC.TIP_ROTATE, BBC.TIP_COPYPASTE, BBC.TIP_REPLACE_MARKER, BBC.TIP_COPY_PATTERN).send(player);
@@ -276,6 +279,9 @@ public class ClipboardCommands extends MethodCommands {
                 copy.setSourceMask(sourceMask == null ? mask : new MaskIntersection(sourceMask, mask));
             }
             Operations.completeBlindly(copy);
+            // Write a disk clipboard's sidecars (tile entities, entities, ids above 4095) now, so
+            // the copy survives a crash or restart, not only an orderly logout
+            clipboard.IMP.flush();
             session.setClipboard(new ClipboardHolder(clipboard, editSession.getWorldData()));
 
             BBC.COMMAND_CUT_SLOW.send(player, region.getArea());
