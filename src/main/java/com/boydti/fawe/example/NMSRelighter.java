@@ -116,6 +116,10 @@ public class NMSRelighter implements Relighter {
         }
     }
 
+    /**
+     * Drop everything pending. Waits for a running block-light pass to finish, so do not call
+     * it from the server thread.
+     */
     public synchronized void clear() {
         queuedSkyToRelight.clear();
         skyToRelight.clear();
