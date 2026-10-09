@@ -33,7 +33,7 @@ public class AnvilHistory extends FaweChangeSet implements IAnvilHistory {
     public AnvilHistory(String world, UUID uuid) {
         super(world);
         File history = MainUtil.getFile(Fawe.imp().getDirectory(), Settings.IMP.PATHS.HISTORY + File.separator + world + File.separator + uuid);
-        File destFolder = new File(history, Integer.toString(MainUtil.getMaxFileId(history)));
+        File destFolder = new File(history, Integer.toString(DiskStorageHistory.nextIndex(history)));
         if (!destFolder.exists()) {
             destFolder.mkdirs();
         }

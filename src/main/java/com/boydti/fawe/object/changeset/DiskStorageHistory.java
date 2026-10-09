@@ -95,10 +95,28 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
         init(uuid, world);
     }
 
+    /**
+     * Last index handed out per history folder in this run. The folder scan alone returns the same
+     * number again when the edit holding it wrote no files (an edit that changed nothing) or when two
+     * edits start at once, and the redo-history cleanup deletes files by index; so indexes only ever
+     * move forward while the server runs.
+     */
+    private static final Map<String, Integer> LAST_INDEX = new HashMap<>();
+
+    public static int nextIndex(File folder) {
+        int scanned = MainUtil.getMaxFileId(folder);
+        String key = folder.getAbsolutePath();
+        synchronized (LAST_INDEX) {
+            Integer last = LAST_INDEX.get(key);
+            int next = last == null ? scanned : Math.max(scanned, last + 1);
+            LAST_INDEX.put(key, next);
+            return next;
+        }
+    }
+
     private void init(UUID uuid, String worldName) {
         File folder = MainUtil.getFile(Fawe.imp().getDirectory(), Settings.IMP.PATHS.HISTORY + File.separator + worldName + File.separator + uuid);
-        int max = MainUtil.getMaxFileId(folder);
-        init(uuid, max);
+        init(uuid, nextIndex(folder));
     }
 
     public DiskStorageHistory(String world, UUID uuid, int index) {
