@@ -755,14 +755,8 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         checkNotNull(mask);
         Mask existing = getSourceMask();
         if (existing != null) {
-            if (existing instanceof MaskIntersection) {
-                ((MaskIntersection) existing).add(mask);
-                return;
-            } else {
-                MaskIntersection intersection = new MaskIntersection(existing);
-                intersection.add(mask);
-                mask = intersection;
-            }
+            // Never mutate the existing mask: it may be the player's //gsmask instance
+            mask = new MaskIntersection(existing, mask);
         }
         setSourceMask(mask);
     }

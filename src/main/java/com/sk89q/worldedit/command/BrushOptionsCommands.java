@@ -208,6 +208,8 @@ public class BrushOptionsCommands extends MethodCommands {
         BrushTool newTool = session.getBrushTool(item, player, false);
         if (newTool != null && tool != null) {
             newTool.setSecondary(tool.getSecondary());
+            // Keep further /br options applying to the brush that was just set
+            newTool.setContext(newTool.getPrimary());
         }
     }
 
@@ -228,6 +230,8 @@ public class BrushOptionsCommands extends MethodCommands {
         BrushTool newTool = session.getBrushTool(item, player, false);
         if (newTool != null && tool != null) {
             newTool.setPrimary(tool.getPrimary());
+            // Keep further /br options applying to the brush that was just set
+            newTool.setContext(newTool.getSecondary());
         }
     }
 
@@ -242,7 +246,7 @@ public class BrushOptionsCommands extends MethodCommands {
             min = 0,
             max = 1
     )
-    public void visual(Player player, LocalSession session, @Range(min = 0, max = 2)int mode) throws WorldEditException {
+    public void visual(Player player, LocalSession session, @Optional("0") @Range(min = 0, max = 2) int mode) throws WorldEditException {
         BrushTool tool = session.getBrushTool(player, false);
         if (tool == null) {
             BBC.BRUSH_NONE.send(player);
@@ -365,7 +369,7 @@ public class BrushOptionsCommands extends MethodCommands {
         parserContext.setExtent(editSession);
         Mask mask = worldEdit.getMaskFactory().parseFromInput(context.getJoinedStrings(0), parserContext);
         BrushSettings settings = offHand ? tool.getOffHand() : tool.getContext();
-        settings.addSetting(BrushSettings.SettingType.MASK, context.getString(context.argsLength() - 1));
+        settings.addSetting(BrushSettings.SettingType.MASK, context.getJoinedStrings(0));
         settings.setMask(mask);
         tool.update();
         BBC.BRUSH_MASK.send(player);
@@ -398,7 +402,7 @@ public class BrushOptionsCommands extends MethodCommands {
         parserContext.setExtent(editSession);
         Mask mask = worldEdit.getMaskFactory().parseFromInput(context.getJoinedStrings(0), parserContext);
         BrushSettings settings = offHand ? tool.getOffHand() : tool.getContext();
-        settings.addSetting(BrushSettings.SettingType.SOURCE_MASK, context.getString(context.argsLength() - 1));
+        settings.addSetting(BrushSettings.SettingType.SOURCE_MASK, context.getJoinedStrings(0));
         settings.setSourceMask(mask);
         tool.update();
         BBC.BRUSH_SOURCE_MASK.send(player);
@@ -430,7 +434,7 @@ public class BrushOptionsCommands extends MethodCommands {
         parserContext.setExtent(editSession);
         ResettableExtent transform = Fawe.get().getTransformParser().parseFromInput(context.getJoinedStrings(0), parserContext);
         BrushSettings settings = offHand ? tool.getOffHand() : tool.getContext();
-        settings.addSetting(BrushSettings.SettingType.TRANSFORM, context.getString(context.argsLength() - 1));
+        settings.addSetting(BrushSettings.SettingType.TRANSFORM, context.getJoinedStrings(0));
         settings.setTransform(transform);
         tool.update();
         BBC.BRUSH_TRANSFORM.send(player);
@@ -457,7 +461,7 @@ public class BrushOptionsCommands extends MethodCommands {
         }
         BrushSettings settings = offHand ? tool.getOffHand() : tool.getContext();
         settings.setFill(pattern);
-        settings.addSetting(BrushSettings.SettingType.FILL, context.getString(context.argsLength() - 1));
+        settings.addSetting(BrushSettings.SettingType.FILL, context.getJoinedStrings(0));
         tool.update();
         BBC.BRUSH_MATERIAL.send(player);
     }

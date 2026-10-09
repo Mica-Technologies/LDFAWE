@@ -61,7 +61,15 @@ public class BrushSettings {
         this.constructor.put(SettingType.PERMISSIONS, permissions);
     }
 
-    public static BrushSettings get(BrushTool tool, Player player, LocalSession session, Map<String, Object> settings) throws CommandException, InputParseException {
+    /**
+     * Strip the leading brush name from a saved brush constructor, e.g. "s stone 5" -> "stone 5".
+     */
+    static String getArguments(String constructor) {
+        int space = constructor.indexOf(' ');
+        return space == -1 ? "" : constructor.substring(space + 1);
+    }
+
+    public static BrushSettings get(BrushTool tool,Player player, LocalSession session, Map<String, Object> settings) throws CommandException, InputParseException {
         Dispatcher dispatcher = CommandManager.getInstance().getDispatcher();
         Dispatcher brushDispatcher = (Dispatcher) (dispatcher.get("brush").getCallable());
         if (brushDispatcher == null) {
@@ -76,7 +84,7 @@ public class BrushSettings {
         CommandCallable sphereCommand = ((ProcessedCallable) brushDispatcher.get(split[0]).getCallable()).getParent();
         CommandLocals locals = new CommandLocals();
         locals.put(Actor.class, player);
-        String args = constructor.replaceAll(split[0] + "[ ]?", "");
+        String args = getArguments(constructor);
         String[] parentArgs = new String[]{"brush", split[0]};
         BrushSettings bs = (BrushSettings) sphereCommand.call(args, locals, parentArgs);
         bs.constructor.put(SettingType.BRUSH, constructor);

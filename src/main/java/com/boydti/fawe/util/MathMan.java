@@ -146,10 +146,8 @@ public class MathMan {
             return min;
         }
         int diff = max - min + 1;
-        if (value < min) {
-            return max - ((min - value) % diff);
-        } else if (value > max) {
-            return min + ((value - min) % diff);
+        if (value < min || value > max) {
+            return min + Math.floorMod(value - min, diff);
         } else {
             return value;
         }

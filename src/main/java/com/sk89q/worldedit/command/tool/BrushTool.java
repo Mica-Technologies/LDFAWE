@@ -359,6 +359,15 @@ public class BrushTool implements DoubleActionTraceTool, ScrollTool, MovableTool
     }
 
     /**
+     * Get the furthest distance a brush can trace to.
+     *
+     * @return the maximum brush range in blocks
+     */
+    public static int getMaxRange() {
+        return MAX_RANGE;
+    }
+
+    /**
      * Get the set brush range.
      *
      * @return the range of the brush in blocks
@@ -387,8 +396,8 @@ public class BrushTool implements DoubleActionTraceTool, ScrollTool, MovableTool
                 pitch = 23 - (pitch / 4);
                 d += (int) (Math.sin(Math.toRadians(pitch)) * 50);
                 final Vector vector = loc.getDirection().setY(0).normalize().multiply(d);
-                vector.add(loc.getX(), loc.getY(), loc.getZ()).toBlockVector();
-                return offset(new MutableBlockVector(vector), loc.toVector());
+                final Vector target = vector.add(loc.getX(), loc.getY(), loc.getZ()).toBlockVector();
+                return offset(new MutableBlockVector(target), loc.toVector());
             }
             case TARGET_POINT_HEIGHT: {
                 final int height = loc.getBlockY();
@@ -465,12 +474,9 @@ public class BrushTool implements DoubleActionTraceTool, ScrollTool, MovableTool
 
             if (existingMask == null) {
                 editSession.setMask(mask);
-            } else if (existingMask instanceof MaskIntersection) {
-                ((MaskIntersection) existingMask).add(mask);
             } else {
-                MaskIntersection newMask = new MaskIntersection(existingMask);
-                newMask.add(mask);
-                editSession.setMask(newMask);
+                // Never mutate the existing mask: it is the player's //gmask instance and would keep the brush mask
+                editSession.setMask(new MaskIntersection(existingMask, mask));
             }
         }
         Mask sourceMask = current.getSourceMask();
