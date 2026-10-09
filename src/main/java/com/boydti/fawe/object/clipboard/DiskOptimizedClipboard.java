@@ -659,9 +659,9 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
 
     @Override
     public void setData(int i, int data) {
-        int index = (HEADER_SIZE) + (i << 1) + 1;
-        byte id = mbb.get(index);
-        mbb.put(index, (byte) ((id & 0xF0) + data));
+        // Through the combined id, so a block stored in the overflow map keeps its real id
+        int combined = getCombinedIdAt(i);
+        setCombined(i, (combined & ~0xF) | (data & 0xF));
     }
 
     @Override

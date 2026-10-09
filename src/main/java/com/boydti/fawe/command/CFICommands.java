@@ -418,13 +418,14 @@ public class CFICommands extends MethodCommands {
             case "#clipboard": {
                 ClipboardHolder holder = fp.getSession().getClipboard();
                 Clipboard clipboard = holder.getClipboard();
-                boolean[] ids = new boolean[Character.MAX_VALUE + 1];
+                // A BitSet, since combined ids of blocks above id 4095 exceed 16 bits
+                java.util.BitSet ids = new java.util.BitSet(Character.MAX_VALUE + 1);
                 for (Vector pt : clipboard.getRegion()) {
-                    ids[clipboard.getBlock(pt).getCombined()] = true;
+                    ids.set(clipboard.getBlock(pt).getCombined());
                 }
                 blocks = new HashSet<>();
-                for (int combined = 0; combined < ids.length; combined++) {
-                    if (ids[combined]) blocks.add(FaweCache.getBlock(combined));
+                for (int combined = ids.nextSetBit(0); combined >= 0; combined = ids.nextSetBit(combined + 1)) {
+                    blocks.add(FaweCache.getBlock(combined));
                 }
                 break;
             }

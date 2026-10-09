@@ -33,13 +33,14 @@ import javax.imageio.ImageIO;
 
 public class TextureUtil implements TextureHolder {
     public static TextureUtil fromClipboard(Clipboard clipboard) throws FileNotFoundException {
-        boolean[] ids = new boolean[Character.MAX_VALUE + 1];
+        // A BitSet, since combined ids of blocks above id 4095 exceed 16 bits
+        java.util.BitSet ids = new java.util.BitSet(Character.MAX_VALUE + 1);
         for (Vector pt : clipboard.getRegion()) {
-            ids[clipboard.getBlock(pt).getCombined()] = true;
+            ids.set(clipboard.getBlock(pt).getCombined());
         }
         HashSet<BaseBlock> blocks = new HashSet<>();
-        for (int combined = 0; combined < ids.length; combined++) {
-            if (ids[combined]) blocks.add(FaweCache.getBlock(combined));
+        for (int combined = ids.nextSetBit(0); combined >= 0; combined = ids.nextSetBit(combined + 1)) {
+            blocks.add(FaweCache.getBlock(combined));
         }
         return fromBlocks(blocks);
     }
@@ -447,7 +448,9 @@ public class TextureUtil implements TextureHolder {
     }
 
     public int getColor(BaseBlock block) {
-        return blockColors[block.getCombined()];
+        int combined = block.getCombined();
+        // Only blocks with known textures have a colour; that never includes ids above 4095
+        return combined >= 0 && combined < blockColors.length ? blockColors[combined] : 0;
     }
 
     public BiomeColor getBiome(int biome) {

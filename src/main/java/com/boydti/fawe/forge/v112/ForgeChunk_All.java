@@ -62,17 +62,12 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
             copy = new ForgeChunk_All(getParent(), getX(), getZ(), ids, count, air, heightMap);
             copy.biomes = biomes;
             copy.chunk = chunk;
-            copy.setOverflowIds(getOverflowIds());
         } else {
             copy = new ForgeChunk_All(getParent(), getX(), getZ(), (char[][]) MainUtil.copyNd(ids), count.clone(), air.clone(), heightMap.clone());
-            copy.biomes = biomes;
+            copy.biomes = biomes != null ? biomes.clone() : null;
             copy.chunk = chunk;
-            copy.biomes = biomes.clone();
-            copy.chunk = chunk;
-            if (getOverflowIds() != null) {
-                copy.setOverflowIds(new java.util.HashMap<>(getOverflowIds()));
-            }
         }
+        copyOverflowTo(copy, shallow);
         if (sectionPalettes != null) {
             copy.sectionPalettes = new BlockStateContainer[16];
             try {

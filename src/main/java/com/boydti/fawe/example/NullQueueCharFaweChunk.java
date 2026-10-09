@@ -20,11 +20,14 @@ public class NullQueueCharFaweChunk extends CharFaweChunk {
 
     @Override
     public CharFaweChunk copy(boolean shallow) {
+        NullQueueCharFaweChunk copy;
         if (shallow) {
-            return new NullQueueCharFaweChunk(getX(), getZ(), ids, count, air, heightMap);
+            copy = new NullQueueCharFaweChunk(getX(), getZ(), ids, count, air, heightMap);
         } else {
-            return new NullQueueCharFaweChunk(getX(), getZ(), (char[][]) MainUtil.copyNd(ids), count.clone(), air.clone(), heightMap.clone());
+            copy = new NullQueueCharFaweChunk(getX(), getZ(), (char[][]) MainUtil.copyNd(ids), count.clone(), air.clone(), heightMap.clone());
         }
+        copyOverflowTo(copy, shallow);
+        return copy;
     }
 
     @Override

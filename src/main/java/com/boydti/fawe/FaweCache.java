@@ -68,7 +68,7 @@ public class FaweCache {
     public static final int MAX_CACHE_INDEX = Character.MAX_VALUE;
 
     static {
-        for (int i = 0; i < Character.MAX_VALUE; i++) {
+        for (int i = 0; i <= Character.MAX_VALUE; i++) {
             int id = i >> 4;
             int data = i & 0xf;
             if (FaweCache.hasNBT(id)) {
@@ -120,7 +120,7 @@ public class FaweCache {
         try {
             BundledBlockData bundled = BundledBlockData.getInstance();
             bundled.loadFromResource();
-            for (int i = 0; i < Character.MAX_VALUE; i++) {
+            for (int i = 0; i <= Character.MAX_VALUE; i++) {
                 int id = i >> 4;
                 int data = i & 0xf;
                 CACHE_TRANSLUSCENT[i] = BlockType.isTranslucent(id);

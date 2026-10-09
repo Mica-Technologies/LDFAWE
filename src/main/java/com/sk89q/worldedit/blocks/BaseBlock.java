@@ -155,7 +155,8 @@ public class BaseBlock implements TileEntityBlock, Pattern, Serializable {
      * @return ID (between 0 and {@link #MAX_ID})
      */
     public int getId() {
-        return id;
+        // Stored in a short; read it unsigned so ids 32768-65535 (MAX_ID) stay positive
+        return id & 0xFFFF;
     }
 
     /**

@@ -54,7 +54,11 @@ public class ExpressionPattern extends AbstractPattern {
                 ((WorldEditExpressionEnvironment) expression.getEnvironment()).setCurrentBlock(vector);
             }
             double combined = expression.evaluate(vector.getX(), vector.getY(), vector.getZ());
-            return FaweCache.getBlock((char) combined);
+            if (combined < 0) {
+                return EditSession.nullBlock;
+            }
+            // Block ids above 4095 give combined ids beyond 16 bits; keep the full value
+            return FaweCache.getBlock((int) combined);
         } catch (EvaluationException e) {
             e.printStackTrace();
             return EditSession.nullBlock;

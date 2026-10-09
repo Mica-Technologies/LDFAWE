@@ -18,7 +18,8 @@ import javax.annotation.Nullable;
 public class BlockBagChangeSet extends AbstractDelegateChangeSet {
 
     private final boolean mine;
-    private int[] missingBlocks = new int[Character.MAX_VALUE + 1];
+    // Keyed by combined id, which exceeds 16 bits for block ids above 4095
+    private final HashMap<Integer, Integer> missingBlocks = new HashMap<>();
     private BlockBag blockBag;
 
     public BlockBagChangeSet(FaweChangeSet parent, BlockBag blockBag, boolean mine) {
@@ -54,15 +55,9 @@ public class BlockBagChangeSet extends AbstractDelegateChangeSet {
      *
      * @return a map of missing blocks
      */
-    public Map<Integer, Integer> popMissing() {
-        HashMap<Integer, Integer> map = new HashMap<>();
-        for (int i = 0; i < missingBlocks.length; i++) {
-            int count = missingBlocks[i];
-            if (count > 0) {
-                map.put(i, count);
-            }
-        }
-        Arrays.fill(missingBlocks, 0);
+    public synchronized Map<Integer, Integer> popMissing() {
+        HashMap<Integer, Integer> map = new HashMap<>(missingBlocks);
+        missingBlocks.clear();
         return map;
     }
 
@@ -87,7 +82,9 @@ public class BlockBagChangeSet extends AbstractDelegateChangeSet {
             } catch (UnplaceableBlockException e) {
                 throw new FaweException.FaweBlockBagException();
             } catch (BlockBagException e) {
-                missingBlocks[combinedTo]++;
+                synchronized (this) {
+                    missingBlocks.merge(combinedTo, 1, Integer::sum);
+                }
                 throw new FaweException.FaweBlockBagException();
             }
         }

@@ -69,7 +69,8 @@ public class ErodeBrush implements Brush {
     }
 
     public void fillIteration(int brushSize, int brushSizeSquared, int fillFaces, FaweClipboard current, FaweClipboard target) {
-        int[] frequency = null;
+        int[] seenTypes = new int[FACES_TO_CHECK.length];
+        int[] seenCounts = new int[FACES_TO_CHECK.length];
         for (int x = -brushSize; x <= brushSize; x++) {
             int x2 = x * x;
             for (int z = -brushSize; z <= brushSize; z++) {
@@ -87,18 +88,25 @@ public class ErodeBrush implements Brush {
                     int total = 0;
                     int highest = 1;
                     BaseBlock highestState = state;
-                    if (frequency == null) {
-                        frequency = new int[4096];
-                    } else {
-                        Arrays.fill(frequency, 0);
-                    }
+                    // At most six neighbours, so tally the distinct types in two small arrays
+                    // (block ids are unbounded with extended ids)
+                    int seen = 0;
                     for (Vector offs : FACES_TO_CHECK) {
                         BaseBlock next = current.getBlock(x + offs.getBlockX(), y + offs.getBlockY(), z + offs.getBlockZ());
                         if (FaweCache.isLiquidOrGas(next.getId())) {
                             continue;
                         }
                         total++;
-                        int count = ++frequency[next.getType()];
+                        int type = next.getType();
+                        int k = 0;
+                        while (k < seen && seenTypes[k] != type) {
+                            k++;
+                        }
+                        if (k == seen) {
+                            seenTypes[seen] = type;
+                            seenCounts[seen++] = 0;
+                        }
+                        int count = ++seenCounts[k];
                         if (count >= highest) {
                             highest = count;
                             highestState = next;
@@ -113,7 +121,8 @@ public class ErodeBrush implements Brush {
     }
 
     public void erosionIteration(int brushSize, int brushSizeSquared, int erodeFaces, FaweClipboard current, FaweClipboard target) {
-        int[] frequency = null;
+        int[] seenTypes = new int[FACES_TO_CHECK.length];
+        int[] seenCounts = new int[FACES_TO_CHECK.length];
         for (int x = -brushSize; x <= brushSize; x++) {
             int x2 = x * x;
             for (int z = -brushSize; z <= brushSize; z++) {
@@ -131,18 +140,25 @@ public class ErodeBrush implements Brush {
                     int total = 0;
                     int highest = 1;
                     int highestState = state.getType();
-                    if (frequency == null) {
-                        frequency = new int[4096];
-                    } else {
-                        Arrays.fill(frequency, 0);
-                    }
+                    // At most six neighbours, so tally the distinct types in two small arrays
+                    // (block ids are unbounded with extended ids)
+                    int seen = 0;
                     for (Vector offs : FACES_TO_CHECK) {
                         BaseBlock next = current.getBlock(x + offs.getBlockX(), y + offs.getBlockY(), z + offs.getBlockZ());
                         if (!FaweCache.isLiquidOrGas(next.getId())) {
                             continue;
                         }
                         total++;
-                        int count = ++frequency[next.getType()];
+                        int type = next.getType();
+                        int k = 0;
+                        while (k < seen && seenTypes[k] != type) {
+                            k++;
+                        }
+                        if (k == seen) {
+                            seenTypes[seen] = type;
+                            seenCounts[seen++] = 0;
+                        }
+                        int count = ++seenCounts[k];
                         if (count > highest) {
                             highest = count;
                             highestState = next.getType();

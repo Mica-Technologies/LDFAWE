@@ -360,11 +360,12 @@ public class BundledBlockData {
      */
     @Nullable
     public BlockEntry findById(int id) {
-        return legacyMap[id];
+        // Only bundled (vanilla and extrablocks.json) ids are known; modded ids can exceed 4095
+        return id >= 0 && id < legacyMap.length ? legacyMap[id] : null;
     }
 
     public String getName(BaseBlock block) {
-        BlockEntry entry = legacyMap[block.getId()];
+        BlockEntry entry = findById(block.getId());
         if (entry != null) {
             String name = entry.id;
             if (block.getData() == 0) return name;

@@ -202,6 +202,22 @@ public abstract class CharFaweChunk<T, V extends FaweQueue> extends FaweChunk<T>
     }
 
     /**
+     * Give a copy of this chunk the same overflow ids (block ids above 4095). A shallow copy shares
+     * the id arrays, so it must share the map too, including entries added after the copy: the map
+     * is created here if it does not exist yet. A deep copy gets its own map.
+     */
+    protected void copyOverflowTo(CharFaweChunk copy, boolean shallow) {
+        if (shallow) {
+            if (overflowIds == null) {
+                overflowIds = new HashMap<>();
+            }
+            copy.overflowIds = overflowIds;
+        } else {
+            copy.overflowIds = overflowIds != null ? new HashMap<>(overflowIds) : null;
+        }
+    }
+
+    /**
      * Set the overflow map (used when copying chunks).
      */
     public void setOverflowIds(HashMap<Integer, Integer> overflow) {

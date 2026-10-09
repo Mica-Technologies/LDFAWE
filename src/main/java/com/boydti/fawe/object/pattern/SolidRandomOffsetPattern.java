@@ -46,13 +46,21 @@ public class SolidRandomOffsetPattern extends AbstractPattern {
         this.mutable = new MutableBlockVector();
     }
 
+    private boolean isSolid(BaseBlock block) {
+        int combined = FaweCache.getCombined(block);
+        if (combined >= 0 && combined < solid.length) {
+            return solid[combined];
+        }
+        return !FaweCache.canPassThrough(block.getId(), block.getData());
+    }
+
     @Override
     public BaseBlock apply(Vector position) {
         mutable.mutX((position.getX() + r.nextInt(dx2) - dx));
         mutable.mutY((position.getY() + r.nextInt(dy2) - dy));
         mutable.mutZ((position.getZ() + r.nextInt(dz2) - dz));
         BaseBlock block = pattern.apply(mutable);
-        if (solid[FaweCache.getCombined(block)]) {
+        if (isSolid(block)) {
             return block;
         } else {
             return pattern.apply(position);
@@ -65,7 +73,7 @@ public class SolidRandomOffsetPattern extends AbstractPattern {
         mutable.mutY((get.getY() + r.nextInt(dy2) - dy));
         mutable.mutZ((get.getZ() + r.nextInt(dz2) - dz));
         BaseBlock block = pattern.apply(mutable);
-        if (solid[FaweCache.getCombined(block)]) {
+        if (isSolid(block)) {
             return pattern.apply(extent, set, mutable);
         } else {
             return pattern.apply(extent, set, get);
