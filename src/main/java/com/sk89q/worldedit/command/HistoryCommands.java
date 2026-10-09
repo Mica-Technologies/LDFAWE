@@ -307,6 +307,70 @@ public class HistoryCommands extends MethodCommands {
     }
 
     @Command(
+            aliases = {"/history", "history"},
+            usage = "[player] [world]",
+            desc = "List recent edits in a player's history",
+            help = "Lists the most recent edits stored in a player's history (your own by default),\n" +
+                    "newest first, with how long ago each was made, where, and roughly how many\n" +
+                    "blocks it changed. Use it before //undo [times] <player> to pick how far to go.\n" +
+                    "Other players' history needs worldedit.history.undo.other. Works from the console.",
+            min = 0,
+            max = 2
+    )
+    @CommandPermissions("worldedit.history.list")
+    public void history(Player player, CommandContext context) throws WorldEditException {
+        UUID owner = player.getUniqueId();
+        String ownerName = player.getName();
+        if (context.argsLength() >= 1) {
+            ownerName = context.getString(0);
+            if (!ownerName.equalsIgnoreCase(player.getName())) {
+                player.checkPermission("worldedit.history.undo.other");
+            }
+            owner = Fawe.imp().getUUID(ownerName);
+            if (owner == null) {
+                BBC.COMMAND_HISTORY_OTHER_ERROR.send(player, ownerName);
+                return;
+            }
+        }
+        World world = context.argsLength() >= 2 ? FaweAPI.getWorld(context.getString(1)) : player.getWorld();
+        if (world == null) {
+            player.printError("Unknown world" + (context.argsLength() >= 2 ? ": " + context.getString(1) : "; name one: //history <player> <world>"));
+            return;
+        }
+        if (!Settings.IMP.HISTORY.USE_DISK) {
+            player.printError("//history lists history stored on disk; history.use-disk is off in the FAWE config.");
+            return;
+        }
+        String worldName = Fawe.imp().getWorldName(world);
+        File folder = MainUtil.getFile(Fawe.imp().getDirectory(), Settings.IMP.PATHS.HISTORY + File.separator + worldName + File.separator + owner);
+        File[] files = folder.listFiles((dir, name) -> name.endsWith(".bd"));
+        if (files == null || files.length == 0) {
+            player.print(BBC.getPrefix() + "No stored history for " + ownerName + " in " + worldName + ".");
+            return;
+        }
+        java.util.Arrays.sort(files, (a, b) -> Long.compare(b.lastModified(), a.lastModified()));
+        player.print(BBC.getPrefix() + "History of " + ownerName + " in " + worldName + " (newest first; //undo N undoes the first N):");
+        long now = System.currentTimeMillis();
+        int shown = 0;
+        for (File file : files) {
+            if (shown == 15) {
+                player.print(BBC.getPrefix() + "  ... and " + (files.length - 15) + " older");
+                break;
+            }
+            String base = file.getName().substring(0, file.getName().length() - 3);
+            if (!MathMan.isInteger(base)) {
+                continue;
+            }
+            int index = Integer.parseInt(base);
+            DiskStorageHistory edit = new DiskStorageHistory(world, owner, index);
+            DiskStorageHistory.DiskStorageSummary summary = edit.summarize(RegionWrapper.GLOBAL(), false);
+            String where = summary == null ? "?" : summary.minX + "," + summary.minZ + " to " + summary.maxX + "," + summary.maxZ;
+            int size = summary == null ? 0 : summary.getSize();
+            player.print(BBC.getPrefix() + "  " + (++shown) + ". #" + index + "  " + MainUtil.secToTime((now - file.lastModified()) / 1000) + " ago  x/z " + where + "  ~" + size + " block(s)");
+        }
+    }
+
+    @Command(
             aliases = {"/clearhistory", "clearhistory"},
             usage = "",
             desc = "Clear your history",
