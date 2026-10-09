@@ -457,7 +457,9 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
                     if (array[j] != 0) {
                         String id = EntityList.getEntityString(ent);
                         if (id != null) {
-                            NBTTagCompound tag = ent.getEntityData();  // readEntityIntoTag
+                            // The full entity NBT (Pos, Rotation, UUID, ...), which the undo respawn reads; getEntityData()
+                            // is only Forge's custom-data compound
+                            NBTTagCompound tag = ent.writeToNBT(new NBTTagCompound());
                             CompoundTag nativeTag = (CompoundTag) methodToNative.invoke(null, tag);
                             Map<String, Tag> map = ReflectionUtils.getMap(nativeTag.getValue());
                             map.put("Id", new StringTag(id));
