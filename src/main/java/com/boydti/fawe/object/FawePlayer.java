@@ -45,7 +45,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public abstract class FawePlayer<T> extends Metadatable {
 
-    public final T parent;
+    /**
+     * The platform player. Not final: a platform may replace the player object while the
+     * player stays online (Forge creates a new entity on respawn), and the cached FawePlayer
+     * must follow it.
+     */
+    public volatile T parent;
     private LocalSession session;
 
     public static final class METADATA_KEYS {

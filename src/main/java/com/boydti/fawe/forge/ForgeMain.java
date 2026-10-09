@@ -68,6 +68,30 @@ public class ForgeMain {
         Fawe.get().unregister(player.getName());
     }
 
+    @SubscribeEvent
+    public void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
+        refreshPlayer(event.player);
+    }
+
+    @SubscribeEvent
+    public void onPlayerChangedDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
+        refreshPlayer(event.player);
+    }
+
+    /**
+     * Point an already cached FawePlayer at the player's current entity (see FaweForge.wrap),
+     * so its world and visualisation packets follow the player without waiting for their next
+     * command.
+     */
+    private void refreshPlayer(Object player) {
+        if (!(player instanceof EntityPlayerMP) || Fawe.get() == null) {
+            return;
+        }
+        if (Fawe.get().getCachedPlayer(((EntityPlayerMP) player).getName()) != null) {
+            Fawe.imp().wrap(player);
+        }
+    }
+
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onPlayerChangedWorld(EntityJoinWorldEvent event) {
         Entity entity = event.getEntity();

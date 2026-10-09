@@ -113,6 +113,11 @@ public class FaweForge implements IFawe {
         }
         FawePlayer existing = Fawe.get().getCachedPlayer(player.getName());
         if (existing != null) {
+            // Respawning replaces the EntityPlayerMP; keep the cached player (and its session
+            // state) but point it at the live entity, or edits and packets go to the old one.
+            if (existing instanceof ForgePlayer && existing.parent != player) {
+                ((ForgePlayer) existing).parent = player;
+            }
             return existing;
         }
         ForgePlayer newPlayer = new ForgePlayer(player);
