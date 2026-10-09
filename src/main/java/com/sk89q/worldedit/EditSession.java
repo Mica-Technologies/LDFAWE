@@ -1339,20 +1339,31 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             Operations.completeBlindly(visitor);
             return visitor.getAffected();
         }
-        final boolean[] ids = new boolean[4096];
+        final BitSet ids = new BitSet(4096);
         for (final int id : searchIDs) {
-            if ((id < 4096) && (id >= 0)) {
-                ids[id] = true;
+            if (id >= 0) {
+                ids.set(id);
             }
         }
         return this.countBlock(region, ids);
     }
 
     public int countBlock(final Region region, final boolean[] ids) {
+        final BitSet set = new BitSet(ids.length);
+        for (int id = 0; id < ids.length; id++) {
+            if (ids[id]) {
+                set.set(id);
+            }
+        }
+        return countBlock(region, set);
+    }
+
+    public int countBlock(final Region region, final BitSet ids) {
         RegionVisitor visitor = new RegionVisitor(region, new RegionFunction() {
             @Override
             public boolean apply(Vector position) throws WorldEditException {
-                return ids[getBlockType(position)];
+                int id = getBlockType(position);
+                return id >= 0 && ids.get(id);
             }
         }, this);
         Operations.completeBlindly(visitor);
@@ -2754,6 +2765,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      * @return the results
      */
     public List<Countable<Integer>> getBlockDistribution(final Region region) {
+        // Indexed by block id; grown on demand because ids above 4095 are legal
         int[] counter = new int[4096];
 
         if (region instanceof CuboidRegion) {
@@ -2773,6 +2785,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     for (int y = minY; y <= maxY; ++y) {
                         for (int z = minZ; z <= maxZ; ++z) {
                             int id = FaweCache.getId(queue.getCombinedId4Data(x, y, z));
+                            if (id >= counter.length) counter = grow(counter, id);
                             counter[id]++;
                         }
                     }
@@ -2783,6 +2796,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     for (int y = minY; y <= maxY; ++y) {
                         for (int z = minZ; z <= maxZ; ++z) {
                             int id = getBlock(x, y, z).getId();
+                            if (id >= counter.length) counter = grow(counter, id);
                             counter[id]++;
                         }
                     }
@@ -2792,6 +2806,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         } else {
             for (final Vector pt : region) {
                 final int id = this.getBlock(pt).getId();
+                if (id >= counter.length) counter = grow(counter, id);
                 counter[id]++;
             }
         }
@@ -2815,6 +2830,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      * @return the results
      */
     public List<Countable<BaseBlock>> getBlockDistributionWithData(final Region region) {
+        // Indexed by combined id; grown on demand because ids above 4095 are legal
         int[] counter = new int[Character.MAX_VALUE + 1];
 
         if (region instanceof CuboidRegion) {
@@ -2833,7 +2849,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                 for (int x = minX; x <= maxX; ++x) {
                     for (int y = minY; y <= maxY; ++y) {
                         for (int z = minZ; z <= maxZ; ++z) {
-                            counter[queue.getCombinedId4Data(x, y, z)]++;
+                            int combined = queue.getCombinedId4Data(x, y, z);
+                            if (combined >= counter.length) counter = grow(counter, combined);
+                            counter[combined]++;
                         }
                     }
                 }
@@ -2842,7 +2860,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     for (int y = minY; y <= maxY; ++y) {
                         for (int z = minZ; z <= maxZ; ++z) {
                             final BaseBlock blk = getBlock(x, y, z);
-                            counter[FaweCache.getCombined(blk)]++;
+                            int combined = FaweCache.getCombined(blk);
+                            if (combined >= counter.length) counter = grow(counter, combined);
+                            counter[combined]++;
                         }
                     }
                 }
@@ -2850,7 +2870,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         } else {
             for (final Vector pt : region) {
                 BaseBlock blk = this.getBlock(pt);
-                counter[FaweCache.getCombined(blk)]++;
+                int combined = FaweCache.getCombined(blk);
+                if (combined >= counter.length) counter = grow(counter, combined);
+                counter[combined]++;
             }
         }
         List<Countable<BaseBlock>> distribution = new ArrayList<>();
@@ -2860,8 +2882,12 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                 distribution.add(new Countable<BaseBlock>(FaweCache.getBlock(i), count));
             }
         }
-        // Collections.reverse(distribution);
+        Collections.sort(distribution);
         return distribution;
+    }
+
+    private static int[] grow(int[] counter, int index) {
+        return Arrays.copyOf(counter, Math.max(index + 1, counter.length << 1));
     }
 
     public int makeShape(final Region region, final Vector zero, final Vector unit, final Pattern pattern, final String expressionString, final boolean hollow) throws ExpressionException,

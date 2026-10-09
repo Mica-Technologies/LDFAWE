@@ -7,6 +7,7 @@ import com.sk89q.worldedit.blocks.BaseBlock;
 import com.sk89q.worldedit.extent.Extent;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.BitSet;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import javax.annotation.Nullable;
@@ -23,8 +24,13 @@ import static com.google.common.base.Preconditions.checkNotNull;
  */
 public class BlockMask extends AbstractExtentMask {
 
-    public final boolean[] blocks = new boolean[Character.MAX_VALUE + 1];
-    public final boolean[] blockIds = new boolean[4096];
+    /**
+     * Matched combined ids ({@code id << 4 | data}) and matched block ids. BitSets rather than
+     * fixed arrays because block ids above 4095 (RoughlyEnoughIDs) are legal; a lookup past the
+     * highest set bit is simply false.
+     */
+    public final BitSet blocks = new BitSet(Character.MAX_VALUE + 1);
+    public final BitSet blockIds = new BitSet(4096);
     public Collection<BaseBlock> computedLegacyList;
 
     /**
@@ -73,18 +79,18 @@ public class BlockMask extends AbstractExtentMask {
     }
 
     public void add(BaseBlock block) {
-        blockIds[block.getId()] = true;
+        blockIds.set(block.getId());
         if (block.getData() == -1) {
             for (int data = 0; data < 16; data++) {
-                blocks[FaweCache.getCombined(block.getId(), data)] = true;
+                blocks.set(FaweCache.getCombined(block.getId(), data));
             }
         } else {
-            blocks[FaweCache.getCombined(block)] = true;
+            blocks.set(FaweCache.getCombined(block));
         }
         computedLegacyList = null;
     }
 
-    public boolean[] getBlockArray() {
+    public BitSet getBlockArray() {
         return blockIds;
     }
 
@@ -98,11 +104,10 @@ public class BlockMask extends AbstractExtentMask {
             return computedLegacyList;
         }
         computedLegacyList = new LinkedHashSet<>();
-        for (int id = 0; id < FaweCache.getId(blocks.length); id++) {
-            boolean all = true;
+        for (int id = blockIds.nextSetBit(0); id >= 0; id = blockIds.nextSetBit(id + 1)) {
             ArrayList<BaseBlock> tmp = new ArrayList<BaseBlock>(16);
             for (int data = 0; data < 16; data++) {
-                if (blocks[FaweCache.getCombined(id, data)]) {
+                if (blocks.get(FaweCache.getCombined(id, data))) {
                     tmp.add(FaweCache.getBlock(id, data));
                 }
             }
@@ -120,11 +125,13 @@ public class BlockMask extends AbstractExtentMask {
             return computedLegacyList;
         }
         computedLegacyList = new LinkedHashSet<>();
-        for (int id = 0; id < FaweCache.getId(blocks.length); id++) {
-            boolean all = true;
+        // The id space is unbounded above, so the inverse is listed for the classic 0-4095 range
+        // plus any id beyond it that has some (but not all) data values matched.
+        int maxId = Math.max(4096, blockIds.length());
+        for (int id = 0; id < maxId; id++) {
             ArrayList<BaseBlock> tmp = new ArrayList<BaseBlock>(16);
             for (int data = 0; data < 16; data++) {
-                if (!blocks[FaweCache.getCombined(id, data)]) {
+                if (!blocks.get(FaweCache.getCombined(id, data))) {
                     tmp.add(FaweCache.getBlock(id, data));
                 }
             }
@@ -143,17 +150,18 @@ public class BlockMask extends AbstractExtentMask {
     }
 
     public boolean test(int blockId) {
-        return blockIds[blockId];
+        return blockId >= 0 && blockIds.get(blockId);
     }
 
     public boolean test(int blockId, int data) {
-        return blocks[FaweCache.getCombined(blockId, data)];
+        int combined = FaweCache.getCombined(blockId, data);
+        return combined >= 0 && blocks.get(combined);
     }
 
     @Override
     public boolean test(Vector vector) {
         BaseBlock block = getExtent().getBlock(vector);
-        return blocks[FaweCache.getCombined(block)];
+        return test(block.getId(), block.getData());
     }
 
     @Nullable

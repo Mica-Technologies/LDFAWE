@@ -1,5 +1,6 @@
 package com.sk89q.worldedit.function.mask;
 
+import com.boydti.fawe.FaweCache;
 import com.sk89q.worldedit.blocks.BaseBlock;
 import com.sk89q.worldedit.blocks.BlockType;
 import com.sk89q.worldedit.extent.Extent;
@@ -16,6 +17,18 @@ public class SolidBlockMask extends BlockMask {
                 }
             }
         }
+    }
+
+    /**
+     * Blocks above id 4095 are not enumerated in the constructor; fall back to FaweCache, which
+     * treats unknown high ids as solid.
+     */
+    @Override
+    public boolean test(int blockId, int data) {
+        if (blockId >= 4096) {
+            return !FaweCache.canPassThrough(blockId, data);
+        }
+        return super.test(blockId, data);
     }
 
     @Nullable
