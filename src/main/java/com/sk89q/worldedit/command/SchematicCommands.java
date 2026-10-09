@@ -63,7 +63,9 @@ import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.atomic.LongAdder;
 import java.util.logging.Level;
@@ -81,6 +83,23 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class SchematicCommands extends MethodCommands {
 
     private static final Logger log = Logger.getLogger(SchematicCommands.class.getCanonicalName());
+
+    // Case-insensitive: on Windows "ABCDEF01-..." names the same per-player folder as "abcdef01-..."
+    private static final Pattern UUID_PATTERN = Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", Pattern.CASE_INSENSITIVE);
+
+    /**
+     * Whether a file inside the schematic folder belongs to another player's per-player folder,
+     * judged on its canonical path so that case or relative segments cannot hide the folder.
+     */
+    private static boolean isOtherPlayersFile(File working, Player player, File file) throws IOException {
+        java.nio.file.Path base = working.getCanonicalFile().toPath();
+        java.nio.file.Path target = file.getCanonicalFile().toPath();
+        if (!target.startsWith(base)) return false;
+        java.nio.file.Path relative = base.relativize(target);
+        if (relative.getNameCount() < 2) return false;
+        String folder = relative.getName(0).toString();
+        return UUID_PATTERN.matcher(folder).matches() && !folder.equalsIgnoreCase(player.getUniqueId().toString());
+    }
 
     /**
      * Create a new instance.
@@ -111,6 +130,18 @@ public class SchematicCommands extends MethodCommands {
 
             MultiClipboardHolder all = format.loadAllFromInput(player, wd, filename, true);
             if (all != null) {
+                // Drop schematics that cannot be read (e.g. PNG), which would otherwise be held as null clipboards
+                MultiClipboardHolder readable = new MultiClipboardHolder(all.getUri(), wd);
+                for (ClipboardHolder holder : all.getHolders()) {
+                    if (holder.getClipboard() != null && holder instanceof URIClipboardHolder) {
+                        readable.add((URIClipboardHolder) holder);
+                    }
+                }
+                if (readable.getHolders().isEmpty()) {
+                    BBC.SCHEMATIC_NOT_FOUND.send(player, filename);
+                    return;
+                }
+                all = readable;
                 session.addClipboard(all);
                 BBC.SCHEMATIC_LOADED.send(player, filename);
             }
@@ -233,7 +264,7 @@ public class SchematicCommands extends MethodCommands {
                         return;
                     }
                 } else {
-                    if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}").matcher(filename).find() && !player.hasPermission("worldedit.schematic.load.other")) {
+                    if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && UUID_PATTERN.matcher(filename).find() && !player.hasPermission("worldedit.schematic.load.other")) {
                         BBC.NO_PERM.send(player, "worldedit.schematic.load.other");
                         return;
                     }
@@ -253,6 +284,10 @@ public class SchematicCommands extends MethodCommands {
                     player.printError("Schematic " + filename + " does not exist! (" + (f == null ? false : f.exists()) + "|" + f + "|" + (!MainUtil.isInSubDirectory(working, f)) + ")");
                     return;
                 }
+                if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && !player.hasPermission("worldedit.schematic.load.other") && isOtherPlayersFile(working, player, f)) {
+                    BBC.NO_PERM.send(player, "worldedit.schematic.load.other");
+                    return;
+                }
                 if (format == null) {
                     format = ClipboardFormat.findByFile(f);
                     if (format == null) {
@@ -262,6 +297,11 @@ public class SchematicCommands extends MethodCommands {
                 }
                 in = new FileInputStream(f);
                 uri = f.toURI();
+            }
+            // hold() clears the clipboard before reading, so refuse a write-only format (PNG) up front
+            if (format == ClipboardFormat.PNG) {
+                BBC.CLIPBOARD_INVALID_FORMAT.send(player, filename);
+                return;
             }
             format.hold(player, uri, in);
             BBC.SCHEMATIC_LOADED.send(player, filename);
@@ -290,6 +330,8 @@ public class SchematicCommands extends MethodCommands {
             player.printError("Unknown schematic format: " + formatName);
             return;
         }
+        // Fails with "clipboard is empty" before any file is touched
+        final ClipboardHolder holder = session.getClipboard();
         File working = this.worldEdit.getWorkingDirectoryFile(config.saveDir);
         File dir = !global && Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS ? new File(working, player.getUniqueId().toString()) : working;
         if (filename.contains("../")) {
@@ -303,7 +345,7 @@ public class SchematicCommands extends MethodCommands {
             }
         }
         File f = this.worldEdit.getSafeSaveFile(player, dir, filename, format.getExtension(), format.getExtension());
-        if (f.getName().replaceAll("." + format.getExtension(), "").isEmpty()) {
+        if (f.getName().replace("." + format.getExtension(), "").isEmpty()) {
             File directory = f.getParentFile();
             if (directory.exists()) {
                 int max = MainUtil.getMaxFileId(directory);
@@ -324,40 +366,46 @@ public class SchematicCommands extends MethodCommands {
                 }
             }
         }
+        File tmp = null;
         try {
-            if (!f.exists()) {
-                f.createNewFile();
-            }
-            try (FileOutputStream fos = new FileOutputStream(f)) {
-                final ClipboardHolder holder = session.getClipboard();
-                final Clipboard clipboard = holder.getClipboard();
-                final Transform transform = holder.getTransform();
-                final Clipboard target;
+            final Clipboard clipboard = holder.getClipboard();
+            final Transform transform = holder.getTransform();
+            final Clipboard target;
 
-                // If we have a transform, bake it into the copy
-                if (!transform.isIdentity()) {
-                    final FlattenedClipboardTransform result = FlattenedClipboardTransform.transform(clipboard, transform, holder.getWorldData());
-                    target = new BlockArrayClipboard(result.getTransformedRegion(), UUID.randomUUID());
-                    target.setOrigin(clipboard.getOrigin());
-                    Operations.completeLegacy(result.copyTo(target));
-                } else {
-                    target = clipboard;
-                }
-                URI uri = null;
-                if (holder instanceof URIClipboardHolder) uri = ((URIClipboardHolder) holder).getURI(clipboard);
-                if (new PlayerSaveClipboardEvent(player, clipboard, uri, f.toURI()).call()) {
+            // If we have a transform, bake it into the copy
+            if (!transform.isIdentity()) {
+                final FlattenedClipboardTransform result = FlattenedClipboardTransform.transform(clipboard, transform, holder.getWorldData());
+                target = new BlockArrayClipboard(result.getTransformedRegion(), UUID.randomUUID());
+                target.setOrigin(clipboard.getOrigin());
+                Operations.completeLegacy(result.copyTo(target));
+            } else {
+                target = clipboard;
+            }
+            URI uri = null;
+            if (holder instanceof URIClipboardHolder) uri = ((URIClipboardHolder) holder).getURI(clipboard);
+            if (new PlayerSaveClipboardEvent(player, clipboard, uri, f.toURI()).call()) {
+                // Write beside the destination and swap it in only once complete, so a failed
+                // save leaves any existing schematic of that name untouched
+                tmp = File.createTempFile("." + f.getName() + ".", ".tmp", f.getParentFile());
+                try (FileOutputStream fos = new FileOutputStream(tmp)) {
                     try (ClipboardWriter writer = format.getWriter(fos)) {
                         if (writer instanceof StructureFormat) {
                             ((StructureFormat) writer).write(target, holder.getWorldData(), player.getName());
                         } else {
                             writer.write(target, holder.getWorldData());
                         }
-                        log.info(player.getName() + " saved " + f.getCanonicalPath());
-                        BBC.SCHEMATIC_SAVED.send(player, filename);
                     }
-                } else {
-                    BBC.WORLDEDIT_CANCEL_REASON_MANUAL.send(player);
                 }
+                try {
+                    Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+                } catch (AtomicMoveNotSupportedException e) {
+                    Files.move(tmp.toPath(), f.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                }
+                tmp = null;
+                log.info(player.getName() + " saved " + f.getCanonicalPath());
+                BBC.SCHEMATIC_SAVED.send(player, filename);
+            } else {
+                BBC.WORLDEDIT_CANCEL_REASON_MANUAL.send(player);
             }
         } catch (IllegalArgumentException e) {
             e.printStackTrace();
@@ -366,6 +414,8 @@ public class SchematicCommands extends MethodCommands {
             e.printStackTrace();
             player.printError("Schematic could not written: " + e.getMessage());
             log.log(Level.WARNING, "Failed to write a saved clipboard", e);
+        } finally {
+            if (tmp != null) tmp.delete();
         }
     }
 
@@ -400,14 +450,14 @@ public class SchematicCommands extends MethodCommands {
                 BBC.SCHEMATIC_MOVE_EXISTS.send(player, destFile);
                 continue;
             }
-            if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && (!MainUtil.isInSubDirectory(dir, destFile) || !MainUtil.isInSubDirectory(dir, source)) && !player.hasPermission("worldedit.schematic.delete.other")) {
+            if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && (!MainUtil.isInSubDirectory(dir, destFile) || !MainUtil.isInSubDirectory(dir, source)) && !player.hasPermission("worldedit.schematic.move.other")) {
                 BBC.SCHEMATIC_MOVE_FAILED.send(player, destFile, BBC.NO_PERM.f("worldedit.schematic.move.other"));
                 continue;
             }
             try {
                 File cached = new File(source.getParentFile(), "." + source.getName() + ".cached");
                 Files.move(source.toPath(), destFile.toPath());
-                if (cached.exists()) Files.move(cached.toPath(), destFile.toPath());
+                if (cached.exists()) Files.move(cached.toPath(), new File(destDir, cached.getName()).toPath(), StandardCopyOption.REPLACE_EXISTING);
                 BBC.SCHEMATIC_MOVE_SUCCESS.send(player, source, destFile);
             } catch (IOException e) {
                 throw new RuntimeException(e);
