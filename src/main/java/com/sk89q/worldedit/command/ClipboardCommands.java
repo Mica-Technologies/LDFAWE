@@ -107,8 +107,7 @@ public class ClipboardCommands extends MethodCommands {
                     "Flags:\n" +
                     "  -e skips copying entities\n" +
                     "  -m sets a source mask so that excluded blocks become air\n" +
-                    "  -b copies biomes\n" +
-                    "WARNING: Pasting entities cannot yet be undone!",
+                    "  -b copies biomes",
             max = 0
     )
     @CommandPermissions("worldedit.clipboard.lazycopy")
@@ -146,8 +145,7 @@ public class ClipboardCommands extends MethodCommands {
                     "Flags:\n" +
                     "  -e skips copying entities\n" +
                     "  -m sets a source mask so that excluded blocks become air\n" +
-                    "  -b copies biomes\n" +
-                    "WARNING: Pasting entities cannot yet be undone!",
+                    "  -b copies biomes",
             min = 0,
             max = 0
     )
@@ -200,8 +198,7 @@ public class ClipboardCommands extends MethodCommands {
                     "Flags:\n" +
                     "  -e skips entity copy\n" +
                     "  -m sets a source mask so that excluded blocks become air\n" +
-                    "  -b copies biomes\n" +
-                    "WARNING: Pasting entities cannot yet be undone!",
+                    "  -b copies biomes",
             max = 0
     )
     @CommandPermissions("worldedit.clipboard.lazycut")
@@ -239,8 +236,7 @@ public class ClipboardCommands extends MethodCommands {
                     "Flags:\n" +
                     "  -e skips entity copy\n" +
                     "  -m sets a source mask so that excluded blocks become air\n" +
-                    "  -b copies biomes\n" +
-                    "WARNING: Cutting and pasting entities cannot yet be undone!",
+                    "  -b copies biomes",
             min = 0,
             max = 1
     )
