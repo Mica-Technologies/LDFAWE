@@ -5,11 +5,20 @@ import com.boydti.fawe.object.change.MutableBlockChange;
 import com.boydti.fawe.object.change.MutableFullBlockChange;
 import com.sk89q.jnbt.NBTInputStream;
 import com.sk89q.jnbt.NBTOutputStream;
+import com.sk89q.worldedit.Vector2D;
+import com.sk89q.worldedit.WorldVector;
+import com.sk89q.worldedit.extent.Extent;
+import com.sk89q.worldedit.extent.inventory.BlockBag;
+import com.sk89q.worldedit.history.UndoContext;
+import com.sk89q.worldedit.history.change.Change;
+import com.sk89q.worldedit.world.biome.BaseBiome;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.lang.reflect.Proxy;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -26,9 +35,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 class FaweStreamChangeSetTest {
 
-    /** Minimal in-memory change set: only the block stream is backed by real storage. */
+    /** Minimal in-memory change set: only the block and biome streams are backed by real storage. */
     static class InMemoryChangeSet extends FaweStreamChangeSet {
         private ByteArrayOutputStream blocks;
+        private ByteArrayOutputStream biomes;
 
         InMemoryChangeSet(boolean storeRedo, boolean smallLoc) {
             super("test", 0, storeRedo, smallLoc);
@@ -72,7 +82,10 @@ class FaweStreamChangeSetTest {
 
         @Override
         public OutputStream getBiomeOS() {
-            return null;
+            if (biomes == null) {
+                biomes = new ByteArrayOutputStream();
+            }
+            return biomes;
         }
 
         @Override
@@ -97,7 +110,7 @@ class FaweStreamChangeSetTest {
 
         @Override
         public FaweInputStream getBiomeIS() {
-            return null;
+            return biomes == null ? null : new FaweInputStream(new ByteArrayInputStream(biomes.toByteArray()));
         }
 
         @Override
@@ -223,6 +236,68 @@ class FaweStreamChangeSetTest {
 
         MutableFullBlockChange full = set.getFullBlockIterator(null, 0, false).next();
         assertEquals(from, full.from, "16-bit ids above 0x7FFF must not sign-extend");
+    }
+
+    /** Undoes every change of the set, recording the biome columns that get set. */
+    private static List<String> undoBiomes(Iterator<? extends Change> changes) throws Exception {
+        List<String> columns = new ArrayList<>();
+        Extent extent = (Extent) Proxy.newProxyInstance(Extent.class.getClassLoader(), new Class[]{Extent.class}, (proxy, method, args) -> {
+            if (method.getName().equals("setBiome") && args.length == 2) {
+                Vector2D pos = (Vector2D) args[0];
+                columns.add(pos.getBlockX() + "," + pos.getBlockZ() + "=" + ((BaseBiome) args[1]).getId());
+                return true;
+            }
+            Class<?> type = method.getReturnType();
+            return type == boolean.class ? Boolean.FALSE : type == int.class ? 0 : null;
+        });
+        UndoContext context = new UndoContext();
+        context.setExtent(extent);
+        while (changes.hasNext()) {
+            changes.next().undo(context);
+        }
+        return columns;
+    }
+
+    @Test
+    void biomeUndoOnlyTouchesRecordedColumns() throws Exception {
+        InMemoryChangeSet set = new InMemoryChangeSet(true, false);
+        set.addBiomeChange(5, -7, new BaseBiome(4), new BaseBiome(2));
+
+        List<String> undone = undoBiomes(set.getBiomeIterator(false));
+        assertEquals(Collections.singletonList("5,-7=4"), undone, "no stray biome change at 0,0");
+    }
+
+    @Test
+    void blockBagUndoAlsoUndoesBiomes() throws Exception {
+        // A biome-only edit has no block stream; inventory-mode undo must not fail on it
+        InMemoryChangeSet set = new InMemoryChangeSet(true, false);
+        set.addBiomeChange(5, -7, new BaseBiome(4), new BaseBiome(2));
+
+        List<String> undone = undoBiomes(set.getIterator(new BlockBagStub(), 1, false));
+        assertEquals(Collections.singletonList("5,-7=4"), undone);
+    }
+
+    /** Block bag that is never consulted, since the edit has no block changes. */
+    static class BlockBagStub extends BlockBag {
+        @Override
+        public void fetchBlock(int id) {
+        }
+
+        @Override
+        public void storeBlock(int id) {
+        }
+
+        @Override
+        public void flushChanges() {
+        }
+
+        @Override
+        public void addSourcePosition(WorldVector pos) {
+        }
+
+        @Override
+        public void addSingleSourcePosition(WorldVector pos) {
+        }
     }
 
     @Test

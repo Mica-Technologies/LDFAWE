@@ -10,6 +10,7 @@ import com.boydti.fawe.object.change.MutableFullBlockChange;
 import com.boydti.fawe.object.change.MutableTileChange;
 import com.boydti.fawe.util.MainUtil;
 import com.boydti.fawe.util.MathMan;
+import com.google.common.collect.Iterators;
 import com.sk89q.jnbt.CompoundTag;
 import com.sk89q.jnbt.NBTInputStream;
 import com.sk89q.jnbt.NBTOutputStream;
@@ -551,7 +552,7 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
         }
         final MutableBiomeChange change = new MutableBiomeChange();
         return new Iterator<MutableBiomeChange>() {
-            private MutableBiomeChange last = new MutableBiomeChange();
+            private MutableBiomeChange last = read();
 
             public MutableBiomeChange read() {
                 try {
@@ -603,7 +604,15 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
     public Iterator<Change> getIterator(BlockBag blockBag, int mode, boolean redo) {
         if (blockBag != null && mode > 0) {
             try {
-                return (Iterator<Change>) (Iterator<?>) getFullBlockIterator(blockBag, mode, redo);
+                close();
+                // Same order as getIterator(dir), with blocks going through the block bag
+                return Iterators.concat(
+                        getTileIterator(getTileCreateIS(), true, redo),
+                        getTileIterator(getTileRemoveIS(), false, redo),
+                        getEntityIterator(getEntityCreateIS(), true, redo),
+                        getEntityIterator(getEntityRemoveIS(), false, redo),
+                        getFullBlockIterator(blockBag, mode, redo),
+                        getBiomeIterator(redo));
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -612,7 +621,7 @@ public abstract class FaweStreamChangeSet extends FaweChangeSet {
     }
 
     public Iterator<MutableFullBlockChange> getFullBlockIterator(BlockBag blockBag, int inventory, final boolean dir) throws IOException {
-        final FaweInputStream is = new FaweInputStream(getBlockIS());
+        final FaweInputStream is = getBlockIS();
         if (is == null) {
             return new ArrayList<MutableFullBlockChange>().iterator();
         }
