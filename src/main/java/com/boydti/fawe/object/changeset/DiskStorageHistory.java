@@ -142,7 +142,7 @@ public class DiskStorageHistory extends FaweStreamChangeSet {
     }
 
     public void delete() {
-        Fawe.debug("Deleting history: " + Fawe.imp().getWorldName(getWorld()) + "/" + uuid + "/" + index);
+        Fawe.debugPlain("Deleting history: " + Fawe.imp().getWorldName(getWorld()) + "/" + uuid + "/" + index);
         deleteFiles();
         if (Settings.IMP.HISTORY.USE_DATABASE) {
             RollbackDatabase db = DBHandler.IMP.getDatabase(getWorld());

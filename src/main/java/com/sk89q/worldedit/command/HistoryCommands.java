@@ -376,8 +376,13 @@ public class HistoryCommands extends MethodCommands {
             DiskStorageHistory.DiskStorageSummary summary = edit.summarize(RegionWrapper.GLOBAL(), false);
             String where = summary == null ? "?" : summary.minX + "," + summary.minZ + " to " + summary.maxX + "," + summary.maxZ;
             int size = summary == null ? 0 : summary.getSize();
-            player.print(BBC.getPrefix() + "  " + (++shown) + ". #" + index + "  " + MainUtil.secToTime((now - file.lastModified()) / 1000) + " ago  x/z " + where + "  ~" + size + " block(s)");
+            player.print(BBC.getPrefix() + "  " + (++shown) + ". #" + index + "  " + age(now - file.lastModified()) + " ago  x/z " + where + "  ~" + size + " block(s)");
         }
+    }
+
+    private static String age(long millis) {
+        long seconds = millis / 1000;
+        return seconds < 1 ? "<1s" : MainUtil.secToTime(seconds).trim();
     }
 
     @Command(
