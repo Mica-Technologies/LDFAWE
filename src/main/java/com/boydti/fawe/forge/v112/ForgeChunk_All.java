@@ -1,5 +1,8 @@
 package com.boydti.fawe.forge.v112;
 
+import com.boydti.fawe.util.ReflectionUtils;
+import com.sk89q.jnbt.LongTag;
+import net.minecraft.world.WorldServer;
 import com.boydti.fawe.Fawe;
 import com.boydti.fawe.FaweCache;
 import com.boydti.fawe.example.CharFaweChunk;
@@ -246,10 +249,20 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     if (entity != null) {
                         NBTTagCompound tag = (NBTTagCompound) ForgeQueue_All.methodFromNative.invoke(null, nativeTag);
                         entity.readFromNBT(tag);
-                        tag.removeTag("UUIDMost");
-                        tag.removeTag("UUIDLeast");
+                        // A pasted copy carries its source's UUID, and the world refuses to add an
+                        // entity whose UUID is already loaded. Keep the UUID otherwise (an undo
+                        // restoring a removed entity), and record the new one so undo can find it.
+                        if (nmsWorld instanceof WorldServer && ((WorldServer) nmsWorld).getEntityFromUuid(entity.getUniqueID()) != null) {
+                            UUID uuid = UUID.randomUUID();
+                            entity.setUniqueId(uuid);
+                            Map<String, Tag> mutableMap = ReflectionUtils.getMap(nativeTag.getValue());
+                            mutableMap.put("UUIDMost", new LongTag(uuid.getMostSignificantBits()));
+                            mutableMap.put("UUIDLeast", new LongTag(uuid.getLeastSignificantBits()));
+                        }
                         entity.setPositionAndRotation(x, y, z, yaw, pitch);
-                        nmsWorld.spawnEntity(entity);
+                        if (nmsWorld.spawnEntity(entity)) {
+                            createdEntities.add(entity.getUniqueID());
+                        }
                     }
                 }
 

@@ -1,5 +1,7 @@
 package com.boydti.fawe.object.extent;
 
+import java.util.Arrays;
+import com.sk89q.jnbt.FloatTag;
 import com.boydti.fawe.FaweCache;
 import com.boydti.fawe.object.FaweQueue;
 import com.boydti.fawe.object.HasFaweQueue;
@@ -71,15 +73,18 @@ public class FastWorldEditExtent extends AbstractDelegateExtent implements HasFa
     @Override
     public Entity createEntity(final Location loc, final BaseEntity entity) {
         if (entity != null) {
-            CompoundTag tag = entity.getNbtData();
+            // Work on a copy: the entity's tag is usually the clipboard's stored one, shared by
+            // every paste still queued
+            CompoundTag tag = entity.getNbtData().createBuilder().build();
             Map<String, Tag> map = ReflectionUtils.getMap(tag.getValue());
             map.put("Id", new StringTag(entity.getTypeId()));
-            ListTag pos = (ListTag) map.get("Pos");
-            if (pos != null) {
-                List<Tag> posList = ReflectionUtils.getList(pos.getValue());
-                posList.set(0, new DoubleTag(loc.getX()));
-                posList.set(1, new DoubleTag(loc.getY()));
-                posList.set(2, new DoubleTag(loc.getZ()));
+            if (map.get("Pos") != null) {
+                map.put("Pos", new ListTag(DoubleTag.class, Arrays.<Tag>asList(
+                        new DoubleTag(loc.getX()), new DoubleTag(loc.getY()), new DoubleTag(loc.getZ()))));
+            }
+            if (map.get("Rotation") != null) {
+                map.put("Rotation", new ListTag(FloatTag.class, Arrays.<Tag>asList(
+                        new FloatTag(loc.getYaw()), new FloatTag(loc.getPitch()))));
             }
             queue.setEntity(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ(), tag);
         }
