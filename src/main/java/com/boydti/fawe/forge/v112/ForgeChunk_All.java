@@ -205,9 +205,6 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     }
                 }
             }
-            // Settle the UUIDs of entities to spawn now, before the change task records them,
-            // so the history refers to the entity that is actually spawned later.
-            assignSpawnUuids(nmsWorld);
             // Run change task if applicable. Entities to spawn do not exist yet, so nothing
             // created by this chunk can be mistaken for a previous entity.
             Set<UUID> createdEntities = Collections.emptySet();
@@ -339,6 +336,18 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
         return this;
     }
 
+    /**
+     * Called by the queue on the server thread just before {@link #call()} is dispatched.
+     * Settles the UUIDs of entities to spawn here, before the change task records them, so
+     * the history refers to the entity that is actually spawned later. Doing it on the server
+     * thread keeps every read of the world's UUID map serialised with the spawns that other
+     * chunks' end() steps perform while workers are still running.
+     */
+    @Override
+    public void start() {
+        assignSpawnUuids(getParent().getWorld());
+    }
+
     private List<Entity> deferredEntityRemovals;
     private List<TileEntity> deferredTileInvalidations;
 
@@ -350,13 +359,15 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
     /**
      * Give every entity to spawn a definite UUID and write it into its tag. A pasted copy
      * carries its source's UUID, and the world refuses to add an entity whose UUID is already
-     * loaded, so such copies get a fresh one; a tag without a UUID gets one too. A UUID that
-     * is free is kept (an undo restoring a removed entity). Writing it into the tag lets the
-     * history record the UUID the spawned entity really has, so undo can find it.
+     * loaded - or already claimed by another chunk of the queue that has not spawned yet - so
+     * such copies get a fresh one; a tag without a UUID gets one too. A UUID that is free is
+     * kept (an undo restoring a removed entity). Writing it into the tag lets the history
+     * record the UUID the spawned entity really has, so undo can find it. Server thread only.
      */
     private void assignSpawnUuids(World nmsWorld) {
         Set<CompoundTag> entitiesToSpawn = this.getEntities();
         if (entitiesToSpawn.isEmpty()) return;
+        Set<UUID> pending = getParent().pendingSpawnUuids;
         for (CompoundTag nativeTag : entitiesToSpawn) {
             Map<String, Tag> entityTagMap = nativeTag.getValue();
             Tag most = entityTagMap.get("UUIDMost");
@@ -364,7 +375,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
             boolean fresh = !(most instanceof LongTag) || !(least instanceof LongTag);
             if (!fresh && nmsWorld instanceof WorldServer) {
                 UUID existing = new UUID(((LongTag) most).getValue(), ((LongTag) least).getValue());
-                fresh = ((WorldServer) nmsWorld).getEntityFromUuid(existing) != null;
+                fresh = ((WorldServer) nmsWorld).getEntityFromUuid(existing) != null || !pending.add(existing);
             }
             if (fresh) {
                 UUID uuid = UUID.randomUUID();
@@ -432,6 +443,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                         entity.readFromNBT(tag);
                         entity.setPositionAndRotation(x, y, z, yaw, pitch);
                         nmsWorld.spawnEntity(entity);
+                        getParent().pendingSpawnUuids.remove(entity.getUniqueID());
                     }
                 }
             }

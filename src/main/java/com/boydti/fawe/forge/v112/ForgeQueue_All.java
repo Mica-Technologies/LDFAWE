@@ -124,6 +124,8 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
 
     protected BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos(0, 0, 0);
     protected WorldServer nmsWorld;
+    /** UUIDs claimed by chunks whose entities are not spawned yet. Server thread only. */
+    final Set<UUID> pendingSpawnUuids = new HashSet<>();
 
     public ForgeQueue_All(com.sk89q.worldedit.world.World world) {
         super(world);
