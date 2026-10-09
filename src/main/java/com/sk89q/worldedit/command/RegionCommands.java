@@ -363,6 +363,7 @@ public class RegionCommands extends MethodCommands {
         player.checkConfirmationRegion(() -> {
             Vector min = region.getMinimumPoint();
             Vector max = region.getMaximumPoint();
+            int minY = min.getBlockY();
             int maxY = max.getBlockY();
             int width = region.getWidth();
             int height = region.getLength();
@@ -377,7 +378,10 @@ public class RegionCommands extends MethodCommands {
                 Vector2D pos = iter.next();
                 int x = pos.getBlockX();
                 int z = pos.getBlockZ();
-                y = editSession.getNearestSurfaceTerrainBlock(x, z, y, 0, maxY);
+                // A column with no surface inside the selection (all air) reports -1 and is left alone
+                int surface = editSession.getNearestSurfaceTerrainBlock(x, z, y, minY, maxY, -1, maxY);
+                if (surface == -1) continue;
+                y = surface;
                 editSession.setBlock(x, y, z, pattern);
                 affected++;
             }

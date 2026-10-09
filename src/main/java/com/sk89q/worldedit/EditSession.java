@@ -1436,7 +1436,23 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         if (direction.equals(new Vector(0, -1, 0))) {
             return fillXZ(origin, pattern, radius, depth, false);
         }
-        final MaskIntersection mask = new MaskIntersection(new RegionMask(new EllipsoidRegion(null, origin, new Vector(radius, radius, radius))), Masks.negate(new ExistingBlockMask(EditSession.this)));
+        // Limit the fill to depth layers along the fill direction, as the downward fill does
+        Vector depthMin = origin.subtract(radius, radius, radius);
+        Vector depthMax = origin.add(radius, radius, radius);
+        Vector far = origin.add(direction.multiply(depth - 1));
+        if (direction.getBlockX() != 0) {
+            depthMin = depthMin.setX(Math.min(origin.getX(), far.getX()));
+            depthMax = depthMax.setX(Math.max(origin.getX(), far.getX()));
+        }
+        if (direction.getBlockY() != 0) {
+            depthMin = depthMin.setY(Math.min(origin.getY(), far.getY()));
+            depthMax = depthMax.setY(Math.max(origin.getY(), far.getY()));
+        }
+        if (direction.getBlockZ() != 0) {
+            depthMin = depthMin.setZ(Math.min(origin.getZ(), far.getZ()));
+            depthMax = depthMax.setZ(Math.max(origin.getZ(), far.getZ()));
+        }
+        final MaskIntersection mask = new MaskIntersection(new RegionMask(new EllipsoidRegion(null, origin, new Vector(radius, radius, radius))), new RegionMask(new CuboidRegion(depthMin, depthMax)), Masks.negate(new ExistingBlockMask(EditSession.this)));
 
         // Want to replace blocks
         final BlockReplace replace = new BlockReplace(EditSession.this, pattern);
@@ -1900,7 +1916,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         final BlockReplace replace = new BlockReplace(EditSession.this, pattern);
         final RegionOffset offset = new RegionOffset(new Vector(0, 1, 0), replace);
         int minY = region.getMinimumPoint().getBlockY();
-        int maxY = Math.min(getMaximumPoint().getBlockY(), region.getMaximumPoint().getBlockY() + 1);
+        int maxY = Math.min(getMaximumPoint().getBlockY(), region.getMaximumPoint().getBlockY());
         SurfaceRegionFunction surface = new SurfaceRegionFunction(this, offset, minY, maxY);
         FlatRegionVisitor visitor = new FlatRegionVisitor(asFlatRegion(region), surface, this);
         Operations.completeBlindly(visitor);
@@ -1956,7 +1972,8 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             setSourceMask(null);
         }
         if (!copyAir) {
-            copy.setSourceMask(new ExistingBlockMask(EditSession.this));
+            Mask existing = new ExistingBlockMask(EditSession.this);
+            copy.setSourceMask(sourceMask == null ? existing : new MaskIntersection(sourceMask, existing));
         }
         Operations.completeBlindly(copy);
         return this.changes = copy.getAffected();
@@ -2013,7 +2030,8 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             setSourceMask(null);
         }
         if (!copyAir) {
-            copy.setSourceMask(new ExistingBlockMask(EditSession.this));
+            Mask existing = new ExistingBlockMask(EditSession.this);
+            copy.setSourceMask(sourceMask == null ? existing : new MaskIntersection(sourceMask, existing));
         }
         Operations.completeBlindly(copy);
         return this.changes = copy.getAffected();
@@ -2946,9 +2964,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     double sz = (position.getZ() - zero.getZ()) / unit.getZ();
                     // transform
                     expression.evaluate(sx, sy, sz);
-                    int xv = (int) (x.getValue() * unit.getX() + zero2.getX());
-                    int yv = (int) (y.getValue() * unit.getY() + zero2.getY());
-                    int zv = (int) (z.getValue() * unit.getZ() + zero2.getZ());
+                    int xv = (int) Math.floor(x.getValue() * unit.getX() + zero2.getX());
+                    int yv = (int) Math.floor(y.getValue() * unit.getY() + zero2.getY());
+                    int zv = (int) Math.floor(z.getValue() * unit.getZ() + zero2.getZ());
                     // read block from world
                     BaseBlock material = FaweCache.getBlock(queue.getCombinedId4DataDebug(xv, yv, zv, 0, EditSession.this));
                     // queue operation

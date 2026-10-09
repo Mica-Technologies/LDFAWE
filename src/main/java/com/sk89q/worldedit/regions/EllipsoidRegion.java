@@ -103,7 +103,7 @@ public class EllipsoidRegion extends AbstractRegion {
 
     @Override
     public int getHeight() {
-        return Math.max((int) (2 * radius.getY()), 256);
+        return Math.min((int) (2 * radius.getY()), 256);
     }
 
     @Override

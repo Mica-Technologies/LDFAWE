@@ -50,6 +50,7 @@ import com.sk89q.worldedit.extent.clipboard.io.ClipboardFormat;
 import com.sk89q.worldedit.extent.clipboard.io.ClipboardWriter;
 import com.sk89q.worldedit.function.block.BlockReplace;
 import com.sk89q.worldedit.function.mask.Mask;
+import com.sk89q.worldedit.function.mask.MaskIntersection;
 import com.sk89q.worldedit.function.mask.Masks;
 import com.sk89q.worldedit.function.operation.ForwardExtentCopy;
 import com.sk89q.worldedit.function.operation.Operation;
@@ -178,7 +179,8 @@ public class ClipboardCommands extends MethodCommands {
                 editSession.setSourceMask(null);
             }
             if (mask != null && mask != Masks.alwaysTrue()) {
-                copy.setSourceMask(mask);
+                // Combine with the //gsmask rather than replacing it
+                copy.setSourceMask(sourceMask == null ? mask : new MaskIntersection(sourceMask, mask));
             }
             Operations.completeBlindly(copy);
             BBC.COMMAND_COPY.send(player, region.getArea());
@@ -269,8 +271,9 @@ public class ClipboardCommands extends MethodCommands {
                 copy.setSourceMask(sourceMask);
                 editSession.setSourceMask(null);
             }
-            if (mask != null) {
-                copy.setSourceMask(mask);
+            if (mask != null && mask != Masks.alwaysTrue()) {
+                // Combine with the //gsmask rather than replacing it
+                copy.setSourceMask(sourceMask == null ? mask : new MaskIntersection(sourceMask, mask));
             }
             Operations.completeBlindly(copy);
             session.setClipboard(new ClipboardHolder(clipboard, editSession.getWorldData()));
