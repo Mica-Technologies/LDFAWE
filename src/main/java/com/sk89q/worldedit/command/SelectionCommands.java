@@ -643,6 +643,24 @@ public class SelectionCommands {
     }
 
 
+    /**
+     * Whether a //count argument names a data value. A single colon is usually a namespace
+     * ("csm:stone_cast"), so only a second colon or a numeric side ("35:14", "wool:14") means data;
+     * each comma-separated entry is checked.
+     */
+    static boolean specifiesData(String input) {
+        for (String entry : input.split(",")) {
+            String[] parts = entry.split(":");
+            if (parts.length > 2) {
+                return true;
+            }
+            if (parts.length == 2 && (parts[0].matches("\\d+") || parts[1].matches("\\d+"))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     @Command(
             aliases = {"/count"},
             usage = "<block>",
@@ -654,7 +672,7 @@ public class SelectionCommands {
     @CommandPermissions("worldedit.analysis.count")
     public void count(Player player, LocalSession session, EditSession editSession, CommandContext args) throws WorldEditException {
         boolean useData = args.hasFlag('d');
-        if (args.getString(0).contains(":")) {
+        if (specifiesData(args.getString(0))) {
             useData = true; //override d flag, if they specified data they want it
         }
         int count;
