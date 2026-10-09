@@ -393,6 +393,16 @@ public class LocalSession implements TextureHolder {
         return null;
     }
 
+    private static boolean sharesFiles(FaweChangeSet discarded, ChangeSet current) {
+        if (discarded == current) {
+            return true;
+        }
+        if (discarded instanceof DiskStorageHistory && current instanceof DiskStorageHistory) {
+            return ((DiskStorageHistory) discarded).getBDFile().equals(((DiskStorageHistory) current).getBDFile());
+        }
+        return false;
+    }
+
     public synchronized void remember(Player player, World world, ChangeSet changeSet, FaweLimit limit) {
         if (Settings.IMP.HISTORY.USE_DISK) {
             LocalSession.MAX_HISTORY_SIZE = Integer.MAX_VALUE;
@@ -416,8 +426,10 @@ public class LocalSession implements TextureHolder {
                         oldChangeSet = getChangeSet(item);
                     }
                     historySize -= MainUtil.getSize(oldChangeSet);
-                    // Discarded redo steps must go from disk too, or they come back on the next history load
-                    if (oldChangeSet != null) oldChangeSet.delete();
+                    // Discarded redo steps must go from disk too, or they come back on the next history load.
+                    // A new edit takes the next free file index, so it can reuse the index of an undone
+                    // edit that wrote nothing; never delete the files of the edit being remembered.
+                    if (oldChangeSet != null && !sharesFiles(oldChangeSet, changeSet)) oldChangeSet.delete();
                     iter.remove();
                 }
             }
@@ -477,8 +489,10 @@ public class LocalSession implements TextureHolder {
                         oldChangeSet = getChangeSet(item);
                     }
                     historySize -= MainUtil.getSize(oldChangeSet);
-                    // Discarded redo steps must go from disk too, or they come back on the next history load
-                    if (oldChangeSet != null) oldChangeSet.delete();
+                    // Discarded redo steps must go from disk too, or they come back on the next history load.
+                    // A new edit takes the next free file index, so it can reuse the index of an undone
+                    // edit that wrote nothing; never delete the files of the edit being remembered.
+                    if (oldChangeSet != null && !sharesFiles(oldChangeSet, changeSet)) oldChangeSet.delete();
                     iter.remove();
                 }
             }
