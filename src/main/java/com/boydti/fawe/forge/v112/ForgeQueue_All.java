@@ -379,23 +379,20 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
                 mcChunk = chunkServer.loadChunk(x, z);
                 PlayerChunkMapEntry entry = playerManager.getEntry(x, z);
                 if (entry != null) {
-                    Field fieldPlayers = PlayerChunkMapEntry.class.getDeclaredField("field_187283_c");
-                    fieldPlayers.setAccessible(true);
+                    // The SRG name only exists in an obfuscated game; the helper maps it to the dev name too
+                    Field fieldPlayers = ObfuscationReflectionHelper.findField(PlayerChunkMapEntry.class, "field_187283_c");
                     oldWatchers = (List<EntityPlayerMP>) fieldPlayers.get(entry);
                     playerManager.removeEntry(entry);
                 }
                 mcChunk.onUnload();
             }
-            try {
-                Field droppedChunksSetField = chunkServer.getClass().getDeclaredField("field_73248_b");
-                droppedChunksSetField.setAccessible(true);
-                Set droppedChunksSet = (Set) droppedChunksSetField.get(chunkServer);
-                droppedChunksSet.remove(pos);
-            } catch (Throwable e) {
-                MainUtil.handleError(e);
-            }
-            Long2ObjectMap<Chunk> id2ChunkMap = chunkServer.loadedChunks;
-            id2ChunkMap.remove(pos);
+            chunkServer.droppedChunks.remove(pos);
+            // Read the provider's chunk map by its SRG name and use it as a plain Map. Naming the
+            // field directly failed at run time with NoSuchFieldError, so the lookup must not
+            // depend on the field's compile-time name or on its exact map class.
+            Field fieldLoadedChunks = ObfuscationReflectionHelper.findField(ChunkProviderServer.class, "field_73244_f");
+            Map<Long, Chunk> id2ChunkMap = (Map<Long, Chunk>) fieldLoadedChunks.get(chunkServer);
+            id2ChunkMap.remove((Long) pos);
             mcChunk = gen.generateChunk(x, z);
             id2ChunkMap.put(pos, mcChunk);
             if (mcChunk != null) {
