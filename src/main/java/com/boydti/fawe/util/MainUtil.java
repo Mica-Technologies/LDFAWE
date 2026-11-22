@@ -33,6 +33,7 @@ import java.util.concurrent.ForkJoinPool;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.*;
 import javax.annotation.Nullable;
@@ -1027,44 +1028,75 @@ public class MainUtil {
         if (string.equalsIgnoreCase("false")) {
             return 0;
         }
-        String[] split = string.split(" ");
+        // Accepts "8h5m12s" as well as "8h 5m 12s": every number followed by a unit is one term.
+        // Anything that is not such a term (an unknown unit, stray text) makes the whole input
+        // invalid, reported as 0, so a mistyped duration is refused and never half-applied.
+        Matcher matcher = TIME_TERM.matcher(string);
         long time = 0;
-        for (String value : split) {
-            int nums = Integer.parseInt(value.replaceAll("[^\\d]", ""));
-            String letters = value.replaceAll("[^a-z]", "");
-            switch (letters) {
+        int end = 0;
+        while (matcher.find()) {
+            if (!string.substring(end, matcher.start()).trim().isEmpty()) {
+                return 0;
+            }
+            end = matcher.end();
+            long nums;
+            try {
+                nums = Long.parseLong(matcher.group(1));
+            } catch (NumberFormatException tooLong) {
+                return 0;
+            }
+            switch (matcher.group(2)) {
+                case "years":
+                case "year":
+                case "yrs":
+                case "yr":
+                case "y":
+                    time += 31536000L * nums;
+                    break;
                 case "week":
                 case "weeks":
                 case "wks":
+                case "wk":
                 case "w":
-
-                    time += 604800 * nums;
+                    time += 604800L * nums;
+                    break;
                 case "days":
                 case "day":
                 case "d":
-                    time += 86400 * nums;
+                    time += 86400L * nums;
+                    break;
                 case "hour":
                 case "hr":
                 case "hrs":
                 case "hours":
                 case "h":
-                    time += 3600 * nums;
+                    time += 3600L * nums;
+                    break;
                 case "minutes":
                 case "minute":
                 case "mins":
                 case "min":
                 case "m":
-                    time += 60 * nums;
+                    time += 60L * nums;
+                    break;
                 case "seconds":
                 case "second":
                 case "secs":
                 case "sec":
                 case "s":
                     time += nums;
+                    break;
+                default:
+                    return 0;
             }
+        }
+        if (!string.substring(end).trim().isEmpty()) {
+            return 0;
         }
         return time;
     }
+
+    private static final Pattern TIME_TERM = Pattern.compile("(\\d+)\\s*([a-z]+)");
 
     public static void deleteOlder(File directory, final long timeDiff) {
         deleteOlder(directory, timeDiff, true);

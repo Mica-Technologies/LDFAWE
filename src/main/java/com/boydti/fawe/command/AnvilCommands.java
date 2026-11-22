@@ -262,6 +262,11 @@ public class AnvilCommands {
     @CommandPermissions("worldedit.anvil.deletealloldregions")
     public void deleteAllOldRegions(Player player, String folder, String time) throws WorldEditException {
         long duration = MainUtil.timeToSec(time) * 1000l;
+        if (duration <= 0) {
+            // An age of 0 would match every region file in the world
+            player.printError("Invalid time: " + time + " (use e.g. 8h5m12s or 30d)");
+            return;
+        }
         DeleteOldFilter filter = new DeleteOldFilter(duration);
         DeleteOldFilter result = runWithWorld(player, folder, filter, true);
         if (result != null) player.print(BBC.getPrefix() + BBC.VISITOR_BLOCK.format(result.getTotal()));
