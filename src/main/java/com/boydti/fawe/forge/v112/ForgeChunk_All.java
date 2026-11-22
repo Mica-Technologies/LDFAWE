@@ -254,7 +254,7 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     if (this.sectionPalettes != null && this.sectionPalettes[j] != null) {
                         section = sections[j] = new ExtendedBlockStorage(j << 4, flag);
                         getParent().setPalette(section, this.sectionPalettes[j]);
-                        getParent().setCount(0, count - this.getAir(j), section);
+                        section.recalculateRefCounts();
                         continue;
                     } else {
                         sections[j] = section = new ExtendedBlockStorage(j << 4, flag);
@@ -266,14 +266,13 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                     }
                     if (this.sectionPalettes != null && this.sectionPalettes[j] != null) {
                         getParent().setPalette(section, this.sectionPalettes[j]);
-                        getParent().setCount(0, count - this.getAir(j), section);
+                        section.recalculateRefCounts();
                         continue;
                     }
                 }
                 IBlockState existing;
                 int by = j << 4;
                 BlockStateContainer nibble = section.getData();
-                int nonEmptyBlockCount = 0;
                 HashMap<Integer, Integer> overflow = getOverflowIds();
                 for (int y = 0; y < 16; y++) {
                     for (int z = 0; z < 16; z++) {
@@ -296,7 +295,6 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                                         if (existing.getLightValue() > 0) {
                                             getParent().getRelighter().addLightUpdate(bx + x, by + y, bz + z);
                                         }
-                                        nonEmptyBlockCount--;
                                     }
                                     nibble.set(x, y, z, ForgeQueue_All.air);
                                     continue;
@@ -306,15 +304,16 @@ public class ForgeChunk_All extends CharFaweChunk<Chunk, ForgeQueue_All> {
                                         if (existing.getLightValue() > 0) {
                                             getParent().getRelighter().addLightUpdate(bx + x, by + y, bz + z);
                                         }
-                                    } else {
-                                        nonEmptyBlockCount++;
                                     }
                                     nibble.set(x, y, z, Block.getBlockById(combinedId >> 4).getStateFromMeta(combinedId & 0xF));
                             }
                         }
                     }
                 }
-                getParent().setCount(0, getParent().getNonEmptyBlockCount(section) + nonEmptyBlockCount, section);
+                // The blocks went straight into the container, so both of the section's counters
+                // are stale. Recount them: a tick counter left at 0 stops crops, saplings, grass,
+                // leaves, fire and ice from random-ticking anywhere in this section.
+                section.recalculateRefCounts();
             }
             // Set biomes — use REID's API when available, vanilla path otherwise
             if (this.biomes != null) {
