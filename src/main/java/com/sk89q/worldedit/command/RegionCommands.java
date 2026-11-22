@@ -767,13 +767,16 @@ public class RegionCommands extends MethodCommands {
                 biome = Biomes.findBiomeByName(knownBiomes, args.getString(0), biomeRegistry);
             }
             Long seed = args.argsLength() != 2 || !MathMan.isInteger(args.getString(1)) ? null : Long.parseLong(args.getString(1));
+            boolean regenerated;
             try {
-                editSession.regenerate(region, biome, seed);
+                regenerated = editSession.regenerate(region, biome, seed);
             } finally {
                 session.setMask(mask);
                 session.setSourceMask(sourceMask);
             }
-            if (biome == null) {
+            if (!regenerated) {
+                BBC.COMMAND_REGEN_FAILED.send(player);
+            } else if (biome == null) {
                 BBC.COMMAND_REGEN_0.send(player);
                 if (!player.hasPermission("fawe.tips")) BBC.TIP_REGEN_0.send(player);
             } else if (seed == null) {

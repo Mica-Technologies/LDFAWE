@@ -85,6 +85,7 @@ public enum BBC {
     COMMAND_REGEN_0("Region regenerated.", "WorldEdit.Regen"),
     COMMAND_REGEN_1("Region regenerated.", "WorldEdit.Regen"),
     COMMAND_REGEN_2("Region regenerated.", "WorldEdit.Regen"),
+    COMMAND_REGEN_FAILED("&cThe region could not be regenerated (the server log has the reason).", "WorldEdit.Regen"),
 
     COMMAND_TREE("%s0 trees created.", "WorldEdit.Tree"),
     COMMAND_PUMPKIN("%s0 pumpkin patches created.", "WorldEdit.Tree"),

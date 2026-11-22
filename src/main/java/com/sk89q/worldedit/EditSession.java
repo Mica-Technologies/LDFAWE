@@ -3451,6 +3451,8 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         final int[] historyTo = fcs != null ? new int[(getMaxY() + 1) << 8] : null;
         final Map<Integer, BaseBlock> historyFromTiles = new HashMap<>();
         final Map<Integer, BaseBlock> historyToTiles = new HashMap<>();
+        // Counts chunks the platform could not regenerate, so the caller does not report success for them
+        final int[] failedChunks = new int[1];
         for (Vector2D chunk : chunks) {
             final int cx = chunk.getBlockX();
             final int cz = chunk.getBlockZ();
@@ -3547,7 +3549,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                 TaskManager.IMP.sync(new RunnableVal<Object>() {
                     @Override
                     public void run(Object value) {
-                        queue.regenerateChunk(cx, cz, biome, seed);
+                        if (!queue.regenerateChunk(cx, cz, biome, seed)) {
+                            failedChunks[0]++;
+                        }
                         if (fcs != null) {
                             // Read the regenerated blocks straight from the world: the queue may still cache the old chunk
                             World world = getWorld();
@@ -3591,7 +3595,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         }
         if (changes != 0) {
             flushQueue();
-            return true;
+            return failedChunks[0] == 0;
         } else {
             this.queue.clear();
         }
