@@ -18,6 +18,7 @@ import com.sk89q.worldedit.function.pattern.RandomPattern;
 import com.sk89q.worldedit.internal.command.ActorAuthorizer;
 import com.sk89q.worldedit.internal.command.WorldEditBinding;
 import com.sk89q.worldedit.internal.expression.Expression;
+import com.sk89q.worldedit.internal.expression.ExpressionException;
 import com.sk89q.worldedit.util.command.Dispatcher;
 import com.sk89q.worldedit.util.command.SimpleDispatcher;
 import com.sk89q.worldedit.util.command.parametric.ParametricBuilder;
@@ -95,7 +96,7 @@ public class HashTagPatternParser extends FaweParser<Pattern> {
                             case '$': {
                                 String value = command.substring(1) + ((entry.getValue().isEmpty()) ? "" : "[" + StringMan.join(entry.getValue(), "][") + "]");
                                 if (value.contains(":")) {
-                                    if (value.charAt(0) == ':') value.replaceFirst(":", "");
+                                    if (value.charAt(0) == ':') value = value.replaceFirst(":", "");
                                     value = value.replaceAll(":", "][");
                                 }
                                 pattern = parseFromInput(char0 + "[" + value + "]", context);
@@ -110,11 +111,12 @@ public class HashTagPatternParser extends FaweParser<Pattern> {
                         } else {
                             int percentIndex = command.indexOf('%');
                             if (percentIndex != -1) {  // Legacy percent pattern
-                                chance = Expression.compile(command.substring(0, percentIndex)).evaluate();
+                                chance = parseWeight(command.substring(0, percentIndex));
                                 String value = command.substring(percentIndex + 1);
                                 if (!entry.getValue().isEmpty()) {
-                                    if (!value.isEmpty()) value += " ";
-                                    value += StringMan.join(entry.getValue(), " ");
+                                    // Put the arguments back in their brackets so "50%#simplex[10][stone,dirt]"
+                                    // parses the same as "#simplex[10][stone,dirt]"
+                                    value += "[" + StringMan.join(entry.getValue(), "][") + "]";
                                 }
                                 pattern = parseFromInput(value, context);
                             } else { // legacy block pattern
@@ -181,6 +183,24 @@ public class HashTagPatternParser extends FaweParser<Pattern> {
         }
     }
 
+
+    /**
+     * Reads the weight in front of the % of a weighted entry such as "50%stone".
+     * The random pattern cannot pick from entries that all weigh nothing (it divides by their
+     * common divisor), so a weight must be greater than 0.
+     */
+    static double parseWeight(String weight) throws InputParseException {
+        double chance;
+        try {
+            chance = Expression.compile(weight).evaluate();
+        } catch (ExpressionException | RuntimeException e) {
+            throw new InputParseException("Invalid weight '" + weight + "%': " + e.getMessage());
+        }
+        if (!(chance > 0)) {
+            throw new InputParseException("Invalid weight '" + weight + "%': it must be greater than 0");
+        }
+        return chance;
+    }
 
     public static Class<HashTagPatternParser> inject() {
         return HashTagPatternParser.class;
