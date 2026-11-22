@@ -9,6 +9,7 @@ import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.WorldEdit;
 import com.sk89q.worldedit.blocks.BaseBlock;
 import com.sk89q.worldedit.entity.Player;
+import com.sk89q.worldedit.extension.input.InputParseException;
 import com.sk89q.worldedit.extent.Extent;
 import com.sk89q.worldedit.function.mask.*;
 import com.sk89q.worldedit.internal.expression.Expression;
@@ -267,19 +268,24 @@ public class MaskCommands extends MethodCommands {
             usage = "<min> <max> [distance=1]",
             min = 2
     )
-    public Mask angle(Extent extent, String min, String max, @Switch('o') boolean overlay, @Optional("1") int distance) throws ExpressionException {
-        double y1, y2;
-        boolean override;
-        if (max.endsWith("d")) {
-            double y1d = Expression.compile(min.substring(0, min.length() - 1)).evaluate();
-            double y2d = Expression.compile(max.substring(0, max.length() - 1)).evaluate();
-            y1 = (Math.tan(y1d * (Math.PI / 180)));
-            y2 = (Math.tan(y2d * (Math.PI / 180)));
-        } else {
-            y1 = (Expression.compile(min).evaluate());
-            y2 = (Expression.compile(max).evaluate());
+    public Mask angle(Extent extent, String min, String max, @Switch('o') boolean overlay, @Optional("1") int distance) throws InputParseException {
+        return new AngleMask(extent, parseSlope(min), parseSlope(max), overlay, distance);
+    }
+
+    /**
+     * Reads one slope argument of the angle masks: a number of blocks, or degrees when it ends in
+     * "d" (45d). Each argument carries its own suffix, so "/[0][45d]" mixes the two forms.
+     */
+    static double parseSlope(String value) throws InputParseException {
+        boolean degrees = value.endsWith("d");
+        String number = degrees ? value.substring(0, value.length() - 1) : value;
+        double parsed;
+        try {
+            parsed = Expression.compile(number).evaluate();
+        } catch (ExpressionException | RuntimeException e) {
+            throw new InputParseException("Invalid slope '" + value + "': use a number of blocks, or degrees such as 45d");
         }
-        return new AngleMask(extent, y1, y2, overlay, distance);
+        return degrees ? Math.tan(parsed * (Math.PI / 180)) : parsed;
     }
 
     @Command(
@@ -293,19 +299,8 @@ public class MaskCommands extends MethodCommands {
             usage = "<min> <max> [distance=4]",
             min = 2
     )
-    public Mask roc(Extent extent, String min, String max, @Switch('o') boolean overlay, @Optional("4") int distance) throws ExpressionException {
-        double y1, y2;
-        boolean override;
-        if (max.endsWith("d")) {
-            double y1d = Expression.compile(min.substring(0, min.length() - 1)).evaluate();
-            double y2d = Expression.compile(max.substring(0, max.length() - 1)).evaluate();
-            y1 = (Math.tan(y1d * (Math.PI / 180)));
-            y2 = (Math.tan(y2d * (Math.PI / 180)));
-        } else {
-            y1 = (Expression.compile(min).evaluate());
-            y2 = (Expression.compile(max).evaluate());
-        }
-        return new ROCAngleMask(extent, y1, y2, overlay, distance);
+    public Mask roc(Extent extent, String min, String max, @Switch('o') boolean overlay, @Optional("4") int distance) throws InputParseException {
+        return new ROCAngleMask(extent, parseSlope(min), parseSlope(max), overlay, distance);
     }
 
     @Command(
@@ -320,19 +315,8 @@ public class MaskCommands extends MethodCommands {
             min = 2,
             max = 4
     )
-    public Mask extrema(Extent extent, String min, String max, @Switch('o') boolean overlay, @Optional("4") int distance) throws ExpressionException {
-        double y1, y2;
-        boolean override;
-        if (max.endsWith("d")) {
-            double y1d = Expression.compile(min.substring(0, min.length() - 1)).evaluate();
-            double y2d = Expression.compile(max.substring(0, max.length() - 1)).evaluate();
-            y1 = (Math.tan(y1d * (Math.PI / 180)));
-            y2 = (Math.tan(y2d * (Math.PI / 180)));
-        } else {
-            y1 = (Expression.compile(min).evaluate());
-            y2 = (Expression.compile(max).evaluate());
-        }
-        return new ExtremaMask(extent, y1, y2, overlay, distance);
+    public Mask extrema(Extent extent, String min, String max, @Switch('o') boolean overlay, @Optional("4") int distance) throws InputParseException {
+        return new ExtremaMask(extent, parseSlope(min), parseSlope(max), overlay, distance);
     }
 
     @Command(
