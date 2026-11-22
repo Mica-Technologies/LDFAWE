@@ -126,9 +126,22 @@ public class Message {
         Fawe.get().getChatManager().send(this, player);
     }
 
+    /**
+     * The command that shows the page after {@code page}, or null when {@code page} is the last one.
+     * Pages are counted from 1; page 0 is an overview that comes before page 1.
+     */
+    public static String nextPageCommand(String baseCommand, int page, int totalPages) {
+        if (page >= totalPages) {
+            return null;
+        }
+        return baseCommand + " " + (page + 1);
+    }
+
     public Message paginate(String baseCommand, int page, int totalPages) {
         if (!active) {
-            return text(BBC.PAGE_FOOTER.f(baseCommand, page + 1));
+            // The footer has one placeholder in every translation, so the page number goes in with the command.
+            String next = nextPageCommand(baseCommand, page, totalPages);
+            return next == null ? this : text(BBC.PAGE_FOOTER.f(next));
         }
         if (page < totalPages && page > 1) { // Back | Next
             this.text("&f<<").command(baseCommand + " " + (page - 1)).text("&8 | ").text("&f>>")
