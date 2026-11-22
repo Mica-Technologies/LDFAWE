@@ -482,6 +482,7 @@ public class ClipboardCommands extends MethodCommands {
                       @Switch('a') boolean ignoreAirBlocks, @Switch('b') boolean ignoreBiomes, @Switch('e') boolean ignoreEntities, @Switch('o') boolean atOrigin,
                       @Switch('s') boolean selectPasted) throws WorldEditException {
         ClipboardHolder holder = session.getClipboard();
+        if (atOrigin && !isPositionKnown(player, holder.getClipboard())) return;
         // The fast path always pastes biomes and entities, so it is only taken when both are wanted
         if (holder.getTransform().isIdentity() && editSession.getSourceMask() == null && !ignoreBiomes && !ignoreEntities) {
             place(player, session, editSession, ignoreAirBlocks, atOrigin, selectPasted);
@@ -512,6 +513,18 @@ public class ClipboardCommands extends MethodCommands {
         BBC.COMMAND_PASTE.send(player, to);
         if (!FawePlayer.wrap(player).hasPermission("fawe.tips"))
             BBC.TIP_COPYPASTE.or(BBC.TIP_SOURCE_MASK, BBC.TIP_REPLACE_MARKER).send(player, to);
+    }
+
+    /**
+     * A clipboard reloaded from a file written by an older build does not know where it was copied;
+     * pasting it with -o would put it near 0,0,0, so refuse instead.
+     */
+    private boolean isPositionKnown(Player player, Clipboard clipboard) {
+        if (clipboard instanceof BlockArrayClipboard && !((BlockArrayClipboard) clipboard).isPositionKnown()) {
+            player.printError("This clipboard was saved by an older version and does not know where it was copied, so -o cannot paste it in place. Copy it again.");
+            return false;
+        }
+        return true;
     }
 
     private void checkPaste(Player player, EditSession editSession, Vector to, ClipboardHolder holder, Clipboard clipboard) {
@@ -545,6 +558,7 @@ public class ClipboardCommands extends MethodCommands {
                       @Switch('s') boolean selectPasted) throws WorldEditException {
         ClipboardHolder holder = session.getClipboard();
         final Clipboard clipboard = holder.getClipboard();
+        if (atOrigin && !isPositionKnown(player, clipboard)) return;
         final Vector origin = clipboard.getOrigin();
         final Vector to = atOrigin ? origin : session.getPlacementPosition(player);
         checkPaste(player, editSession, to, holder, clipboard);

@@ -88,6 +88,8 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
 
     private FileChannel fc;
     private boolean hasBiomes;
+    /** World position of the region's minimum corner, or null when the file does not record it. */
+    private Vector regionMinimum;
 
     public DiskOptimizedClipboard(int width, int height, int length, UUID uuid) {
         this(width, height, length, MainUtil.getFile(Fawe.get() != null ? Fawe.imp().getDirectory() : new File("."), Settings.IMP.PATHS.CLIPBOARD + File.separator + uuid + ".bd"));
@@ -112,6 +114,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             }
             loadOverflow();
             loadNbt();
+            loadRegionMinimum();
             autoCloseTask();
         } catch (IOException e) {
             throw new RuntimeException(e);
@@ -197,12 +200,15 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
 
     public BlockArrayClipboard toClipboard() {
         try {
-            CuboidRegion region = new CuboidRegion(new Vector(0, 0, 0), new Vector(width - 1, height - 1, length - 1));
+            // Files written before the position was recorded only know the origin relative to the
+            // region, so their region starts at 0,0,0
+            Vector min = regionMinimum != null ? regionMinimum : new Vector(0, 0, 0);
+            CuboidRegion region = new CuboidRegion(min, min.add(width - 1, height - 1, length - 1));
             int ox = mbb.getShort(8);
             int oy = mbb.getShort(10);
             int oz = mbb.getShort(12);
             BlockArrayClipboard clipboard = new BlockArrayClipboard(region, this);
-            clipboard.setOrigin(new Vector(ox, oy, oz));
+            clipboard.setOrigin(min.add(ox, oy, oz));
             for (PendingEntity pending : pendingEntities) {
                 createEntity(clipboard, pending.x, pending.y, pending.z, pending.yaw, pending.pitch, pending.entity);
             }
@@ -244,6 +250,7 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
             // A new clipboard reuses the file: drop the previous clipboard's sidecars along with its blocks
             getOverflowFile().delete();
             getNbtFile().delete();
+            getPositionFile().delete();
             this.braf = new RandomAccessFile(file, "rw");
             long volume = (long) width * (long) height * (long) length * 2l + (long) HEADER_SIZE;
             braf.setLength(0);
@@ -685,6 +692,43 @@ public class DiskOptimizedClipboard extends FaweClipboard implements Closeable {
 
     private File getNbtFile() {
         return new File(file.getPath() + ".nbt");
+    }
+
+    private File getPositionFile() {
+        return new File(file.getPath() + ".pos");
+    }
+
+    /**
+     * Record where in the world the copied region starts. The header only holds the origin relative
+     * to the region, so without this a clipboard reopened from disk no longer knows where it was
+     * copied and cannot be pasted back there with -o.
+     */
+    public void setRegionMinimum(Vector min) {
+        regionMinimum = new Vector(min.getBlockX(), min.getBlockY(), min.getBlockZ());
+        try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(getPositionFile()))) {
+            dos.writeInt(min.getBlockX());
+            dos.writeInt(min.getBlockY());
+            dos.writeInt(min.getBlockZ());
+        } catch (IOException e) {
+            MainUtil.handleError(e);
+        }
+    }
+
+    /**
+     * @return whether the world position of the region is known (false for files from older builds)
+     */
+    public boolean hasRegionMinimum() {
+        return regionMinimum != null;
+    }
+
+    private void loadRegionMinimum() {
+        File positionFile = getPositionFile();
+        if (!positionFile.exists()) return;
+        try (DataInputStream dis = new DataInputStream(new FileInputStream(positionFile))) {
+            regionMinimum = new Vector(dis.readInt(), dis.readInt(), dis.readInt());
+        } catch (IOException e) {
+            MainUtil.handleError(e);
+        }
     }
 
     /**
