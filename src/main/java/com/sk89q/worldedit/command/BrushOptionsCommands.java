@@ -475,7 +475,8 @@ public class BrushOptionsCommands extends MethodCommands {
     )
     @CommandPermissions("worldedit.brush.options.range")
     public void range(Player player, LocalSession session, CommandContext args) throws WorldEditException {
-        int range = Math.max(0, Math.min(256, args.getInteger(0)));
+        // A range of 0 can never reach a block
+        int range = Math.max(1, Math.min(256, args.getInteger(0)));
         BrushTool tool = session.getBrushTool(player, false);
         if (tool == null) {
             player.print(BBC.getPrefix() + BBC.BRUSH_NONE.f());
