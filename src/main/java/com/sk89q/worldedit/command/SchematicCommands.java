@@ -260,7 +260,7 @@ public class SchematicCommands extends MethodCommands {
                     }
                     f = player.openFileOpenDialog(extensions);
                     if (f == null || !f.exists()) {
-                        player.printError("Schematic " + filename + " does not exist! (" + f + ")");
+                        player.printError("Schematic " + filename + " does not exist.");
                         return;
                     }
                 } else {
@@ -281,7 +281,7 @@ public class SchematicCommands extends MethodCommands {
                     }
                 }
                 if (f == null || !f.exists() || !MainUtil.isInSubDirectory(working, f)) {
-                    player.printError("Schematic " + filename + " does not exist! (" + (f == null ? false : f.exists()) + "|" + f + "|" + (!MainUtil.isInSubDirectory(working, f)) + ")");
+                    player.printError("Schematic " + filename + " does not exist.");
                     return;
                 }
                 if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && !player.hasPermission("worldedit.schematic.load.other") && isOtherPlayersFile(working, player, f)) {
@@ -478,7 +478,7 @@ public class SchematicCommands extends MethodCommands {
         if (filename.equalsIgnoreCase("*")) {
             files.addAll(getFiles(session.getClipboard()));
         } else {
-            File f = MainUtil.resolveRelative(new File(dir, filename));
+            File f = MainUtil.resolveExisting(dir, filename);
             files.add(f);
         }
         if (files.isEmpty()) {
@@ -486,8 +486,8 @@ public class SchematicCommands extends MethodCommands {
             return;
         }
         for (File f : files) {
-            if (!MainUtil.isInSubDirectory(working, f) || !f.exists()) {
-                player.printError("Schematic " + filename + " does not exist! (" + f.exists() + "|" + f + "|" + (!MainUtil.isInSubDirectory(working, f)) + ")");
+            if (f == null || !MainUtil.isInSubDirectory(working, f) || !f.exists()) {
+                player.printError("Schematic " + filename + " does not exist.");
                 continue;
             }
             if (Settings.IMP.PATHS.PER_PLAYER_SCHEMATICS && !MainUtil.isInSubDirectory(dir, f) && !player.hasPermission("worldedit.schematic.delete.other")) {
