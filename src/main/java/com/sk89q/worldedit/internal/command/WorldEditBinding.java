@@ -323,19 +323,37 @@ public class WorldEditBinding extends BindingHelper {
     public BaseBiome getBiomeType(ArgumentStack context) throws ParameterException, WorldEditException {
         String input = context.next();
         if (input != null) {
-            if (MathMan.isInteger(input)) return new BaseBiome(Integer.parseInt(input));
-            
             Actor actor = context.getContext().getLocals().get(Actor.class);
-            World world;
+            World world = null;
             if (actor instanceof Entity) {
                 Extent extent = ((Entity) actor).getExtent();
                 if (extent instanceof World) {
                     world = (World) extent;
-                } else {
-                    throw new ParameterException("A world is required.");
                 }
-            } else {
-                throw new ParameterException("An entity is required.");
+            }
+
+            if (MathMan.isInteger(input)) {
+                int id = Integer.parseInt(input);
+                // Without a world there is no registry to check against, so the id is taken as given.
+                // Ids above 255 can be real biomes here (REID), so only the registry decides.
+                if (world != null) {
+                    boolean registered = false;
+                    for (BaseBiome known : world.getWorldData().getBiomeRegistry().getBiomes()) {
+                        if (known.getId() == id) {
+                            registered = true;
+                            break;
+                        }
+                    }
+                    if (!registered) {
+                        throw new ParameterException(
+                                String.format("Can't recognize biome id '%s' -- use /biomelist to list available types", input));
+                    }
+                }
+                return new BaseBiome(id);
+            }
+
+            if (world == null) {
+                throw new ParameterException(actor instanceof Entity ? "A world is required." : "An entity is required.");
             }
 
             BiomeRegistry biomeRegistry = world.getWorldData().getBiomeRegistry();
