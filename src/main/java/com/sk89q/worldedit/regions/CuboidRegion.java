@@ -22,6 +22,7 @@ package com.sk89q.worldedit.regions;
 import com.boydti.fawe.config.Settings;
 import com.boydti.fawe.object.collection.LocalBlockVectorSet;
 import com.sk89q.worldedit.BlockVector;
+import com.sk89q.worldedit.BlockVector2D;
 import com.sk89q.worldedit.LocalWorld;
 import com.sk89q.worldedit.MutableBlockVector;
 import com.sk89q.worldedit.MutableBlockVector2D;
@@ -331,25 +332,26 @@ public class CuboidRegion extends AbstractRegion implements FlatRegion {
         return new AbstractSet<Vector2D>() {
             @Override
             public Iterator<Vector2D> iterator() {
+                // Rows of x from maxX down to minX, for each z from maxZ down to minZ. Each chunk is
+                // its own vector, since callers keep them in sets and lists.
                 return new Iterator<Vector2D>() {
-                    private MutableBlockVector2D pos = new MutableBlockVector2D().setComponents(maxX + 1, maxZ);
+                    private int x = maxX;
+                    private int z = maxZ;
 
                     @Override
                     public boolean hasNext() {
-                        return pos != null;
+                        return z >= minZ;
                     }
 
                     @Override
                     public Vector2D next() {
-                        Vector2D result = pos;
-                        // calc next
-                        pos.setComponents(pos.getX() - 1, pos.getZ());
-                        if (pos.getX() <= minX) {
-                            if (pos.getZ() == minZ) {
-                                pos = null;
-                            } else if (pos.getX() < minX) {
-                                pos.setComponents(maxX, pos.getZ() - 1);
-                            }
+                        if (!hasNext()) {
+                            throw new NoSuchElementException();
+                        }
+                        Vector2D result = new BlockVector2D(x, z);
+                        if (--x < minX) {
+                            x = maxX;
+                            z--;
                         }
                         return result;
                     }
