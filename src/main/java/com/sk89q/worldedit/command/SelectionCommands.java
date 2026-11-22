@@ -20,6 +20,7 @@
 package com.sk89q.worldedit.command;
 
 import com.boydti.fawe.config.BBC;
+import com.boydti.fawe.object.BlockStateRegistry;
 import com.boydti.fawe.object.FawePlayer;
 import com.boydti.fawe.object.clipboard.URIClipboardHolder;
 import com.boydti.fawe.object.mask.IdMask;
@@ -765,25 +766,33 @@ public class SelectionCommands {
 
         if (useData) {
             for (Countable<BaseBlock> c : distributionData) {
-                BlockType block = BlockType.fromID(c.getID().getId());
-                String name = block != null ? block.getName() : null;
                 String str = String.format("%-7s (%.3f%%) %s #%d:%d",
                         String.valueOf(c.getAmount()),
                         c.getAmount() / (double) size * 100,
-                        name == null ? "Unknown" : name,
+                        blockName(c.getID().getId()),
                         c.getID().getType(), c.getID().getData());
                 player.print(BBC.getPrefix() + str);
             }
         } else {
             for (Countable<Integer> c : distribution) {
-                BlockType block = BlockType.fromID(c.getID());
                 String str = String.format("%-7s (%.3f%%) %s #%d",
                         String.valueOf(c.getAmount()),
                         c.getAmount() / (double) size * 100,
-                        block == null ? "Unknown" : block.getName(), c.getID());
+                        blockName(c.getID()), c.getID());
                 player.print(BBC.getPrefix() + str);
             }
         }
+    }
+
+    // The game's registry knows modded blocks; the legacy BlockType table only knows vanilla ones.
+    private static String blockName(int id) {
+        BlockStateRegistry registry = BlockStateRegistry.get();
+        String name = registry != null ? registry.getName(id) : null;
+        if (name == null) {
+            BlockType block = BlockType.fromID(id);
+            name = block != null ? block.getName() : null;
+        }
+        return name == null ? "Unknown" : name;
     }
 
     @Command(
@@ -846,7 +855,7 @@ public class SelectionCommands {
                 player.print(BBC.getPrefix() + BBC.SEL_MAX.f(limit.get()));
             }
             player.print(BBC.getPrefix() + BBC.SEL_LIST.s());
-        } else if (typeName.startsWith("fuzzy") || typeName.startsWith("magic")) {
+        } else if (typeName.toLowerCase().startsWith("fuzzy") || typeName.toLowerCase().startsWith("magic")) {
             Mask mask;
             if (typeName.length() > 6) {
                 ParserContext parserContext = new ParserContext();
@@ -894,7 +903,8 @@ public class SelectionCommands {
                 session.setDefaultRegionSelector(found);
                 BBC.SELECTOR_SET_DEFAULT.send(player, found.name());
             } else {
-                throw new RuntimeException("Something unexpected happened. Please report this.");
+                // FAWE's own selectors (fuzzy, polyhedral) have no RegionSelectorType to store.
+                player.print(BBC.getPrefix() + "The " + typeName + " selector cannot be saved as your default; it is used for this session only.");
             }
         }
 
