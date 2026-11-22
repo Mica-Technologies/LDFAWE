@@ -628,20 +628,24 @@ public class UtilityCommands extends MethodCommands {
                 }
             });
 
-            Double result = Double.NaN;
             try {
-                result = futureResult.get(limit.MAX_EXPRESSION_MS, TimeUnit.MILLISECONDS);
+                Double result = futureResult.get(limit.MAX_EXPRESSION_MS, TimeUnit.MILLISECONDS);
+                actor.print(BBC.getPrefix() + "= " + result);
             } catch (InterruptedException e) {
                 e.printStackTrace();
+                actor.print(BBC.getPrefix() + "= " + Double.NaN);
             } catch (ExecutionException e) {
-                e.printStackTrace();
+                // The expression itself failed (for example an unknown function); say why
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                actor.printError(String.format(
+                        "'%s' could not be evaluated (error: %s)", input, cause.getMessage()));
             } catch (TimeoutException e) {
                 futureResult.cancel(true);
-                e.printStackTrace();
+                actor.printError(String.format(
+                        "'%s' took longer than %s ms to evaluate and was stopped", input, limit.MAX_EXPRESSION_MS));
+            } finally {
+                executor.shutdownNow();
             }
-
-            executor.shutdownNow();
-            actor.print(BBC.getPrefix() + "= " + result);
         } catch (EvaluationException e) {
             actor.printError(String.format(
                     "'%s' could not be parsed as a valid expression", input));
