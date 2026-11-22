@@ -27,6 +27,7 @@ import com.boydti.fawe.object.FaweLimit;
 import com.boydti.fawe.object.FaweOutputStream;
 import com.boydti.fawe.object.FawePlayer;
 import com.boydti.fawe.object.brush.visualization.VirtualWorld;
+import com.boydti.fawe.object.changeset.AbstractDelegateChangeSet;
 import com.boydti.fawe.object.changeset.AnvilHistory;
 import com.boydti.fawe.object.changeset.DiskStorageHistory;
 import com.boydti.fawe.object.changeset.FaweChangeSet;
@@ -352,15 +353,28 @@ public class LocalSession implements TextureHolder {
      */
     public synchronized void clearHistory(boolean deleteFromDisk) {
         if (deleteFromDisk) {
-            for (Object item : history) {
-                FaweChangeSet changeSet = item instanceof FaweChangeSet ? (FaweChangeSet) item : getChangeSet(item);
-                if (changeSet != null) changeSet.delete();
+            deleteHistoryFiles();
+            if (uuid != null && currentWorld != null) {
+                // The list can miss edits that are on disk (made before this session loaded its
+                // history, or never remembered); the next load would bring them back, so delete
+                // everything the folder holds, and the saved undo position with it
+                history.clear();
+                loadHistoryChangeSets(uuid, currentWorld);
+                deleteHistoryFiles();
+                MainUtil.getFile(Fawe.imp().getDirectory(), Settings.IMP.PATHS.HISTORY + File.separator + Fawe.imp().getWorldName(currentWorld) + File.separator + uuid + File.separator + "index").delete();
             }
         }
         history.clear();
         historyNegativeIndex = 0;
         historySize = 0;
         currentWorld = null;
+    }
+
+    private void deleteHistoryFiles() {
+        for (Object item : history) {
+            FaweChangeSet changeSet = item instanceof FaweChangeSet ? (FaweChangeSet) item : getChangeSet(item);
+            if (changeSet != null) changeSet.delete();
+        }
     }
 
     /**
@@ -403,6 +417,22 @@ public class LocalSession implements TextureHolder {
         return false;
     }
 
+    /**
+     * An edit's files are already on disk when it is remembered, so a history load that the
+     * remember itself triggered lists that same edit by its index. Keeping both makes one edit take
+     * two undos, and shifts the redo cut-off by one, so the index entry has to go.
+     */
+    private void forgetLoadedCopy(ChangeSet changeSet) {
+        ChangeSet inner = changeSet;
+        while (inner instanceof AbstractDelegateChangeSet) {
+            inner = ((AbstractDelegateChangeSet) inner).getParent();
+        }
+        if (inner instanceof DiskStorageHistory && history.remove(Integer.valueOf(((DiskStorageHistory) inner).getIndex()))) {
+            historySize -= MainUtil.getSize((DiskStorageHistory) inner);
+            historyNegativeIndex = Math.min(getHistoryNegativeIndex(), history.size());
+        }
+    }
+
     public synchronized void remember(Player player, World world, ChangeSet changeSet, FaweLimit limit) {
         if (Settings.IMP.HISTORY.USE_DISK) {
             LocalSession.MAX_HISTORY_SIZE = Integer.MAX_VALUE;
@@ -411,6 +441,7 @@ public class LocalSession implements TextureHolder {
             return;
         }
         loadSessionHistoryFromDisk(player.getUniqueId(), world);
+        forgetLoadedCopy(changeSet);
         if (changeSet instanceof FaweChangeSet) {
             int size = getHistoryNegativeIndex();
             ListIterator<Object> iter = history.listIterator();
@@ -473,6 +504,7 @@ public class LocalSession implements TextureHolder {
         if (fp != null) {
             loadSessionHistoryFromDisk(fp.getUUID(), editSession.getWorld());
         }
+        forgetLoadedCopy(changeSet);
         // Destroy any sessions after this undo point
         if (append) {
             int size = getHistoryNegativeIndex();
