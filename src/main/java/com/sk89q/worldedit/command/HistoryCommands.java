@@ -402,7 +402,10 @@ public class HistoryCommands extends MethodCommands {
     )
     @CommandPermissions("worldedit.history.clear")
     public void clearHistory(Player player, LocalSession session) throws WorldEditException {
-        // Delete the files too, or the cleared edits come back on the next undo
+        // Delete the files too, or the cleared edits come back on the next undo. Load the history
+        // first: a session that has not touched it yet this game holds none of it in memory, and
+        // would otherwise delete nothing.
+        session.loadSessionHistoryFromDisk(player.getUniqueId(), FawePlayer.wrap(player).getWorldForEditing());
         session.clearHistory(true);
         BBC.COMMAND_HISTORY_CLEAR.send(player);
     }
