@@ -34,6 +34,7 @@ import com.boydti.fawe.object.brush.visualization.VirtualWorld;
 import com.boydti.fawe.object.changeset.*;
 import com.boydti.fawe.object.clipboard.ReadOnlyClipboard;
 import com.boydti.fawe.object.clipboard.WorldCopyClipboard;
+import com.boydti.fawe.object.collection.BlockVectorSet;
 import com.boydti.fawe.object.collection.LocalBlockVectorSet;
 import com.boydti.fawe.object.exception.FaweException;
 import com.boydti.fawe.object.extent.*;
@@ -3120,7 +3121,8 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      */
     public int drawLine(final Pattern pattern, final Vector pos1, final Vector pos2, final double radius, final boolean filled, boolean flat) {
 
-        LocalBlockVectorSet vset = new LocalBlockVectorSet();
+        // A line can be longer than the 1024 blocks a LocalBlockVectorSet spans from its first entry
+        BlockVectorSet vset = new BlockVectorSet();
         boolean notdrawn = true;
 
         final int x1 = pos1.getBlockX(), y1 = pos1.getBlockY(), z1 = pos1.getBlockZ();
@@ -3192,7 +3194,8 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      * @throws MaxChangedBlocksException thrown if too many blocks are changed
      */
     public int drawSpline(final Pattern pattern, final List<Vector> nodevectors, final double tension, final double bias, final double continuity, final double quality, final double radius, final boolean filled) {
-        LocalBlockVectorSet vset = new LocalBlockVectorSet();
+        // A curve can reach further than the 1024 blocks a LocalBlockVectorSet spans from its first entry
+        BlockVectorSet vset = new BlockVectorSet();
         final List<Node> nodes = new ArrayList<Node>(nodevectors.size());
 
         final KochanekBartelsInterpolation interpol = new KochanekBartelsInterpolation();
@@ -3233,7 +3236,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         if (radius < 1) {
             return vset;
         }
-        final LocalBlockVectorSet returnset = new LocalBlockVectorSet();
+        final BlockVectorSet returnset = new BlockVectorSet();
         final int ceilrad = (int) Math.ceil(radius);
         for (final Vector v : vset) {
             final int tipx = v.getBlockX(), tipy = v.getBlockY(), tipz = v.getBlockZ();
@@ -3256,7 +3259,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         if (radius < 1) {
             return vset;
         }
-        final LocalBlockVectorSet returnset = new LocalBlockVectorSet();
+        final BlockVectorSet returnset = new BlockVectorSet();
         final int ceilrad = (int) Math.ceil(radius);
         for (final Vector v : vset) {
             final int tipx = v.getBlockX(), tipy = v.getBlockY(), tipz = v.getBlockZ();
@@ -3273,7 +3276,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
 
     public Set<Vector> getOutline(final Set<Vector> vset) {
         // TODO optimize - vset instanceof LocalBlockVectorSet -> avoid Vector creation
-        final LocalBlockVectorSet returnset = new LocalBlockVectorSet();
+        final BlockVectorSet returnset = new BlockVectorSet();
         for (final Vector v : vset) {
             final double x = v.getX(), y = v.getY(), z = v.getZ();
             if (!(vset.contains(new Vector(x + 1, y, z))
@@ -3287,7 +3290,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
 
     public Set<Vector> getHollowed(final Set<Vector> vset) {
         //TODO Optimize - avoid vector creation
-        final Set returnset = new LocalBlockVectorSet();
+        final Set returnset = new BlockVectorSet();
         for (final Vector v : vset) {
             final double x = v.getX(), y = v.getY(), z = v.getZ();
             if (!(vset.contains(new Vector(x + 1, y, z))
