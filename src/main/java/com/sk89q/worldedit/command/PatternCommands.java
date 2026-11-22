@@ -106,6 +106,7 @@ public class PatternCommands extends MethodCommands {
             max = 3
     )
     public Pattern anglecolor(Extent extent, LocalSession session, @Optional("true") boolean randomize, @Optional("100") double maxComplexity, @Optional("1") int distance) {
+        requireTextures(session);
         return new AngleColorPattern(extent, session, distance);
     }
 
@@ -126,6 +127,7 @@ public class PatternCommands extends MethodCommands {
             max = 3
     )
     public Pattern saturate(Extent extent, LocalSession session, String arg) {
+        requireTextures(session);
         Color color = ColorUtil.parseColor(arg);
         return new SaturatePattern(extent, color.getRGB(), session);
     }
@@ -138,6 +140,7 @@ public class PatternCommands extends MethodCommands {
             max = 3
     )
     public Pattern averagecolor(Extent extent, LocalSession session, String arg) {
+        requireTextures(session);
         Color color = ColorUtil.parseColor(arg);
         return new AverageColorPattern(extent, color.getRGB(), session);
     }
@@ -150,7 +153,16 @@ public class PatternCommands extends MethodCommands {
             max = 3
     )
     public Pattern desaturate(Extent extent, LocalSession session, @Optional("100") double percent) {
+        requireTextures(session);
         return new DesaturatePattern(extent, percent / 100d, session);
+    }
+
+    /**
+     * These patterns only look the textures up while the edit runs; load them now so missing
+     * textures are reported as a parse error rather than failing the edit part way.
+     */
+    private static void requireTextures(LocalSession session) {
+        session.getTextureUtil();
     }
 
     @Command(
