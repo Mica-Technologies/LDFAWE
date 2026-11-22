@@ -138,7 +138,7 @@ public enum BBC {
     BRUSH_SPLINE_SECONDARY_ERROR("Not enough positions set!", "WorldEdit.Brush"),
     BRUSH_SPLINE_SECONDARY("Created spline", "WorldEdit.Brush"),
     BRUSH_SIZE("Brush size set", "WorldEdit.Brush"),
-    BRUSH_RANGE("Brush size set", "WorldEdit.Brush"),
+    BRUSH_RANGE("Brush range set", "WorldEdit.Brush"),
     BRUSH_MASK_DISABLED("Brush mask disabled", "WorldEdit.Brush"),
     BRUSH_MASK("Brush mask set", "WorldEdit.Brush"),
     BRUSH_SOURCE_MASK_DISABLED("Brush source mask disabled", "WorldEdit.Brush"),

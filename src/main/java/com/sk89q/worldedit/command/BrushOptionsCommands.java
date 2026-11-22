@@ -302,8 +302,8 @@ public class BrushOptionsCommands extends MethodCommands {
 
     @Command(
             aliases = {"targetoffset", "to"},
-            usage = "[mask]",
-            desc = "Set the targeting mask",
+            usage = "[offset]",
+            desc = "Set the targeting offset",
             min = 1,
             max = -1
     )
@@ -450,22 +450,23 @@ public class BrushOptionsCommands extends MethodCommands {
             aliases = {"mat", "material"},
             usage = "[pattern]",
             desc = "Set the brush material",
-            min = 1,
+            min = 0,
             max = 1
     )
     @CommandPermissions("worldedit.brush.options.material")
-    public void material(Player player, EditSession editSession, LocalSession session, Pattern pattern, @Switch('h') boolean offHand, CommandContext context) throws WorldEditException {
+    public void material(Player player, EditSession editSession, LocalSession session, @Optional Pattern pattern, @Switch('h') boolean offHand, CommandContext context) throws WorldEditException {
         BrushTool tool = session.getBrushTool(player, false);
         if (tool == null) {
             player.print(BBC.getPrefix() + BBC.BRUSH_NONE.f());
             return;
         }
-        if (context.argsLength() == 0) {
-            BBC.BRUSH_TRANSFORM_DISABLED.send(player);
-            tool.setFill(null);
+        BrushSettings settings = offHand ? tool.getOffHand() : tool.getContext();
+        if (pattern == null) {
+            settings.setFill(null);
+            tool.update();
+            player.print(BBC.getPrefix() + "Brush material cleared");
             return;
         }
-        BrushSettings settings = offHand ? tool.getOffHand() : tool.getContext();
         settings.setFill(pattern);
         settings.addSetting(BrushSettings.SettingType.FILL, context.getJoinedStrings(0));
         tool.update();
@@ -474,7 +475,7 @@ public class BrushOptionsCommands extends MethodCommands {
 
     @Command(
             aliases = {"range"},
-            usage = "[pattern]",
+            usage = "[range]",
             desc = "Set the brush range",
             min = 1,
             max = 1
@@ -494,7 +495,7 @@ public class BrushOptionsCommands extends MethodCommands {
 
     @Command(
             aliases = {"size"},
-            usage = "[pattern]",
+            usage = "[size]",
             desc = "Set the brush size",
             min = 1,
             max = 1
