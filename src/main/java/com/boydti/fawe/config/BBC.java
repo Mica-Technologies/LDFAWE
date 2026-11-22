@@ -307,7 +307,7 @@ public enum BBC {
     TIP_LAZYCUT("&7Tip: It is safer to use &c//lazycut", "Tips"),
     // set
     TIP_FAST("&7Tip: Set fast and without undo using &c//fast", "Tips"),
-    TIP_CANCEL("&7Tip: You can &c//cancel &7an edit in progress", "Tips"),
+    TIP_CANCEL("&7Tip: You can &c/fcancel &7an edit in progress", "Tips"),
     TIP_MASK("&7Tip: Set a global destination mask with &c/gmask", "Tips"),
     TIP_MASK_ANGLE("Tip: Replace upward slopes of 3-20 blocks using&c //replace /[-20][-3] bedrock", "Tips"),
     TIP_SET_LINEAR("&7Tip: Set blocks linearly with&c //set #l3d[wood,bedrock]", "Tips"),

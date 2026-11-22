@@ -310,7 +310,7 @@ tips:
   tip_farwand: 'Sugerencia: Seleccione puntos distantes con &4//farwand'
   tip_lazycut: '&7Sugerencia: Es más seguro usar &4//lazycut'
   tip_fast: '&7Sugerencia: Ajuste rápido y sin deshacer usando &4//fast'
-  tip_cancel: '&7Sugerencia: Usted puede &4//cancel &7un editar en curso'
+  tip_cancel: '&7Sugerencia: Usted puede &4/fcancel &7un editar en curso'
   tip_mask: '&7Sugerencia: Establecer una máscara de destino global con &4/gmask'
   tip_mask_angle: 'Sugerencia: Reemplace las pendientes ascendentes de 3-20 bloques
     utilizando&4 //replace /[-20][-3] bedrock'
