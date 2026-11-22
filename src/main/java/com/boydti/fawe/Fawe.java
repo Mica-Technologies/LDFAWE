@@ -325,10 +325,19 @@ public class Fawe {
                 tmp = textures;
                 if (tmp == null) {
                     try {
-                        textures = tmp = new TextureUtil();
+                        tmp = new TextureUtil();
                         tmp.loadModTextures();
+                        // Only a fully loaded instance is kept, so a failed load is tried again next time
+                        textures = tmp;
                     } catch (IOException e) {
-                        throw new RuntimeException(e);
+                        File folder = MainUtil.getFile(IMP.getDirectory(), Settings.IMP.PATHS.TEXTURES);
+                        String message = "This needs block textures, which FAWE reads from a Minecraft client jar"
+                                + " (for example .minecraft/versions/1.12.2/1.12.2.jar) or a resource pack jar placed in "
+                                + folder.getAbsolutePath()
+                                + (e instanceof FileNotFoundException ? "" : " (" + e.getMessage() + ")");
+                        // Pattern and mask parsing looks for an InputParseException in the causes and
+                        // shows its message to the player as a parse error
+                        throw new RuntimeException(message, new com.sk89q.worldedit.extension.input.InputParseException(message));
                     }
                 }
             }
