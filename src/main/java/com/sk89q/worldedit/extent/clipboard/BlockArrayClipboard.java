@@ -73,6 +73,7 @@ public class BlockArrayClipboard implements Clipboard, LightingExtent, Closeable
         this.mx = origin.getBlockX();
         this.my = origin.getBlockY();
         this.mz = origin.getBlockZ();
+        rememberRegionMinimum();
     }
 
     /**
@@ -91,6 +92,7 @@ public class BlockArrayClipboard implements Clipboard, LightingExtent, Closeable
         this.mx = origin.getBlockX();
         this.my = origin.getBlockY();
         this.mz = origin.getBlockZ();
+        rememberRegionMinimum();
     }
 
     public BlockArrayClipboard(Region region, FaweClipboard clipboard) {
@@ -114,6 +116,25 @@ public class BlockArrayClipboard implements Clipboard, LightingExtent, Closeable
         this.mx = origin.getBlockX();
         this.my = origin.getBlockY();
         this.mz = origin.getBlockZ();
+        rememberRegionMinimum();
+    }
+
+    /**
+     * A disk clipboard only stores the origin relative to the region; give it the region's world
+     * position too, so a clipboard reopened after a relog still pastes back in place with -o.
+     */
+    private void rememberRegionMinimum() {
+        if (IMP instanceof DiskOptimizedClipboard) {
+            ((DiskOptimizedClipboard) IMP).setRegionMinimum(region.getMinimumPoint());
+        }
+    }
+
+    /**
+     * @return false when this clipboard was reopened from a disk file that does not record where it
+     * was copied, so its region and origin are only correct relative to each other
+     */
+    public boolean isPositionKnown() {
+        return !(IMP instanceof DiskOptimizedClipboard) || ((DiskOptimizedClipboard) IMP).hasRegionMinimum();
     }
 
     @Override

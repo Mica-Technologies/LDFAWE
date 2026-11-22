@@ -3,9 +3,11 @@ package com.boydti.fawe.object.clipboard;
 import com.sk89q.jnbt.CompoundTag;
 import com.sk89q.jnbt.StringTag;
 import com.sk89q.jnbt.Tag;
+import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.entity.BaseEntity;
 import com.sk89q.worldedit.entity.Entity;
 import com.sk89q.worldedit.extent.clipboard.BlockArrayClipboard;
+import com.sk89q.worldedit.regions.CuboidRegion;
 import com.sk89q.worldedit.util.Location;
 import java.io.File;
 import java.util.HashMap;
@@ -63,6 +65,48 @@ class DiskOptimizedClipboardTest {
         DiskOptimizedClipboard fresh = new DiskOptimizedClipboard(4, 3, 2, file);
         assertFalse(new File(dir, "player.bd.nbt").exists());
         assertTrue(fresh.getTileEntities().isEmpty());
+        fresh.close();
+    }
+
+    /**
+     * The copy's world position survives reopening, so //paste -o after a relog lands where the copy
+     * was made; a file without the recorded position says so instead of pretending it starts at 0,0,0.
+     */
+    @Test
+    void worldPositionSurvivesReopening(@TempDir File dir) {
+        File file = new File(dir, "player.bd");
+        DiskOptimizedClipboard original = new DiskOptimizedClipboard(3, 3, 3, file);
+        BlockArrayClipboard clipboard = original.toClipboard();
+        Vector min = new Vector(21905, 4, -21907);
+        clipboard.init(new CuboidRegion(min, min.add(2, 2, 2)), original);
+        clipboard.setOrigin(new Vector(21900, 4, -21900));
+        original.close();
+
+        DiskOptimizedClipboard reopened = new DiskOptimizedClipboard(file);
+        BlockArrayClipboard restored = reopened.toClipboard();
+        assertTrue(restored.isPositionKnown());
+        assertEquals(min, restored.getRegion().getMinimumPoint());
+        assertEquals(min.add(2, 2, 2), restored.getRegion().getMaximumPoint());
+        assertEquals(new Vector(21900, 4, -21900), restored.getOrigin());
+        reopened.close();
+
+        // A file from an older build has no position sidecar
+        assertTrue(new File(dir, "player.bd.pos").delete());
+        DiskOptimizedClipboard old = new DiskOptimizedClipboard(file);
+        BlockArrayClipboard oldClipboard = old.toClipboard();
+        assertFalse(oldClipboard.isPositionKnown());
+        assertEquals(new Vector(0, 0, 0), oldClipboard.getRegion().getMinimumPoint());
+        assertEquals(new Vector(-5, 0, 7), oldClipboard.getOrigin());
+        old.close();
+
+        // A new clipboard on the same file does not inherit the previous position
+        DiskOptimizedClipboard copied = new DiskOptimizedClipboard(3, 3, 3, file);
+        copied.toClipboard().init(new CuboidRegion(min, min.add(2, 2, 2)), copied);
+        assertTrue(new File(dir, "player.bd.pos").exists());
+        copied.close();
+        DiskOptimizedClipboard fresh = new DiskOptimizedClipboard(3, 3, 3, file);
+        assertFalse(new File(dir, "player.bd.pos").exists());
+        assertFalse(fresh.toClipboard().isPositionKnown());
         fresh.close();
     }
 }
