@@ -1177,7 +1177,9 @@ public class MainUtil {
 
     public static boolean isValidSign(CompoundTag tag) {
         Map<String, Tag> values = tag.getValue();
-        if (values.size() > 4 && values.containsKey("Text1")) {
+        // A sign typed as standing_sign|text carries only Text1 to Text4; one read from the world also
+        // has id and x/y/z. Both are valid, so only the text is checked.
+        if (values.containsKey("Text1")) {
             Tag text1 = values.get("Text1");
             Object value = text1.getValue();
             return value != null && value instanceof String && ((String) value).length() > 0;
