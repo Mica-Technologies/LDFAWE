@@ -21,6 +21,7 @@ package com.sk89q.worldedit.extension.factory;
 
 import com.boydti.fawe.jnbt.JSON2NBT;
 import com.boydti.fawe.jnbt.NBTException;
+import com.boydti.fawe.object.FawePlayer;
 import com.boydti.fawe.util.MathMan;
 import com.boydti.fawe.util.StringMan;
 import com.sk89q.jnbt.CompoundTag;
@@ -49,12 +50,14 @@ import com.sk89q.worldedit.extension.input.ParserContext;
 import com.sk89q.worldedit.extension.platform.Actor;
 import com.sk89q.worldedit.extent.inventory.BlockBag;
 import com.sk89q.worldedit.extent.inventory.SlottableBlockBag;
+import com.sk89q.worldedit.forge.ForgePlayer;
 import com.sk89q.worldedit.internal.registry.InputParser;
 import com.sk89q.worldedit.world.World;
 import com.sk89q.worldedit.world.registry.BundledBlockData;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import net.minecraft.entity.player.EntityPlayerMP;
 
 /**
  * Parses block input strings.
@@ -67,6 +70,16 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
 
     private static BaseBlock getBlockInHand(Actor actor) throws InputParseException {
         if (actor instanceof Player) {
+            // The generic lookup turns the held item's id into a block id, so a stick (item 280)
+            // would become whatever block has id 280; ask the game what the stack places instead
+            FawePlayer<Object> fp = FawePlayer.wrap(actor);
+            if (fp != null && fp.parent instanceof EntityPlayerMP) {
+                BaseBlock held = ForgePlayer.getPlaceableBlockInHand((EntityPlayerMP) fp.parent);
+                if (held == null || held.getId() == 0) {
+                    throw new InputParseException("You're not holding a block!");
+                }
+                return held;
+            }
             try {
                 BaseBlock block = ((Player) actor).getBlockInHand();
                 if (((Player) actor).getWorld().isValidBlockType(block.getId())) {
@@ -226,7 +239,9 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
                     if (block == null) {
                         BaseBlock baseBlock = BundledBlockData.getInstance().findByState(testId);
                         if (baseBlock == null) {
-                            blockType = BlockType.lookup(testId);
+                            // Exact aliases only: the fuzzy lookup accepts names one edit away from
+                            // an alias, so red_wool (not a 1.12 name) became log through "redwood"
+                            blockType = BlockType.lookup(testId, false);
                             if (blockType == null) {
                                 int t = worldEdit.getServer().resolveItem(testId);
                                 if (t == 0 && !testId.contains("air")) {

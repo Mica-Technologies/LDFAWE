@@ -36,7 +36,9 @@ import io.netty.buffer.Unpooled;
 import java.util.UUID;
 import javax.annotation.Nullable;
 import net.minecraft.entity.player.EntityPlayerMP;
+import net.minecraft.block.Block;
 import net.minecraft.item.Item;
+import net.minecraft.item.ItemBlock;
 import net.minecraft.item.ItemStack;
 import net.minecraft.network.PacketBuffer;
 import net.minecraft.network.play.server.SPacketCustomPayload;
@@ -68,6 +70,21 @@ public class ForgePlayer extends AbstractPlayerActor {
     public BaseBlock getBlockInHand() {
         ItemStack is = this.player.getHeldItem(EnumHand.MAIN_HAND);
         return is == null ? EditSession.nullBlock : new BaseBlock(Item.getIdFromItem(is.getItem()), is.isItemStackDamageable() ? 0 : is.getItemDamage());
+    }
+
+    /**
+     * The block the held stack would place, or null when the held item is not a block.
+     * {@link #getBlockInHand()} keys tools by the item id, which for an item that is not a block can
+     * equal the id of an unrelated block, so it cannot be used to pick a block to place.
+     */
+    @Nullable
+    public static BaseBlock getPlaceableBlockInHand(EntityPlayerMP player) {
+        ItemStack is = player.getHeldItem(EnumHand.MAIN_HAND);
+        if (is.isEmpty() || !(is.getItem() instanceof ItemBlock)) {
+            return null;
+        }
+        Block block = ((ItemBlock) is.getItem()).getBlock();
+        return new BaseBlock(Block.getIdFromBlock(block), is.isItemStackDamageable() ? 0 : is.getItemDamage());
     }
 
     @Override
