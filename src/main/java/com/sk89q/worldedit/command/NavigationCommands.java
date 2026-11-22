@@ -81,6 +81,11 @@ public class NavigationCommands {
     )
     @CommandPermissions("worldedit.navigation.ascend")
     public void ascend(Player player, @Optional("1") int levelsToAscend) throws WorldEditException {
+        if (levelsToAscend < 1) {
+            // The loop below only stops on an exact match, so 0 went all the way up
+            player.printError("The number of levels must be at least 1.");
+            return;
+        }
         int ascentLevels = 0;
         while (player.ascendLevel()) {
             ++ascentLevels;
@@ -108,6 +113,10 @@ public class NavigationCommands {
     )
     @CommandPermissions("worldedit.navigation.descend")
     public void descend(Player player, @Optional("1") int levelsToDescend) throws WorldEditException {
+        if (levelsToDescend < 1) {
+            player.printError("The number of levels must be at least 1.");
+            return;
+        }
         int descentLevels = 0;
         while (player.descendLevel()) {
             ++descentLevels;
