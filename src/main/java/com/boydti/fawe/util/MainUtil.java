@@ -901,6 +901,18 @@ public class MainUtil {
         return null;
     }
 
+    /**
+     * Find an existing file by the name a player typed: the name as given first, then with each
+     * schematic extension appended, so "house" finds "house.schematic" the way loading does.
+     *
+     * @return the existing file, or null when nothing matches
+     */
+    public static File resolveExisting(File dir, String filename) {
+        File file = MainUtil.resolveRelative(new File(dir, filename));
+        if (file.exists()) return file;
+        return resolve(dir, filename, null, false);
+    }
+
     public static boolean isInSubDirectory(File dir, File file) throws IOException {
         if (file == null) return false;
         if (file.equals(dir)) return true;
