@@ -344,8 +344,10 @@ public class RegionCommands extends MethodCommands {
         player.checkConfirmationRegion(() -> {
             int affected;
             affected = editSession.setBlocks(selection, to);
+            // Always answer, so a mask or region that rejected every block is not mistaken
+            // for a command that never ran
+            BBC.OPERATION.send(player, affected);
             if (affected != 0) {
-                BBC.OPERATION.send(player, affected);
                 if (!player.hasPermission("fawe.tips"))
                     BBC.TIP_FAST.or(BBC.TIP_CANCEL, BBC.TIP_MASK, BBC.TIP_MASK_ANGLE, BBC.TIP_SET_LINEAR, BBC.TIP_SURFACE_SPREAD, BBC.TIP_SET_HAND).send(player);
             }
