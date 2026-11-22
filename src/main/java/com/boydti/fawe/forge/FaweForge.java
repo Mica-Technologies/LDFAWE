@@ -66,11 +66,6 @@ public class FaweForge implements IFawe {
     }
 
     @Override
-    public boolean isOnlineMode() {
-        return FMLCommonHandler.instance().getMinecraftServerInstance().isServerInOnlineMode();
-    }
-
-    @Override
     public String getPlatformVersion() {
         return "1.12";
     }
@@ -164,16 +159,6 @@ public class FaweForge implements IFawe {
     @Override
     public Collection<FaweMaskManager> getMaskManagers() {
         return new ArrayList<>();
-    }
-
-    @Override
-    public void startMetrics() {
-        try {
-            com.boydti.fawe.forge.ForgeMetrics metrics = new com.boydti.fawe.forge.ForgeMetrics("FastAsyncWorldEdit", "3.5.1");
-            metrics.start();
-        } catch (Throwable e) {
-            debug("[FAWE] &cFailed to load up metrics.");
-        }
     }
 
     @Override

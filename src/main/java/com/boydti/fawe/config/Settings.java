@@ -24,9 +24,6 @@ public class Settings extends Config {
     @Comment({"Options: cn, de, es, fr, it, nl, ru, tr",
             "Create a PR to contribute a translation: https://github.com/boy0001/FastAsyncWorldedit/new/master/core/src/main/resources",})
     public String LANGUAGE = "";
-    @Comment({"Send anonymous usage statistics to bStats (upstream FAWE's account).",
-            " - Off by default in this fork"})
-    public boolean METRICS = false;
     @Comment({
             "Set true to enable WorldEdit restrictions per region (e.g. PlotSquared or WorldGuard).",
             "To be allowed to WorldEdit in a region, users need the appropriate",
