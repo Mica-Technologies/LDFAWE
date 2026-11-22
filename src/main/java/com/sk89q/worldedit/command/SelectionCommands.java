@@ -714,8 +714,39 @@ public class SelectionCommands {
         List<Countable<BaseBlock>> distributionData = null;
 
         if (args.hasFlag('c')) {
-            // TODO: Update for new clipboard
-            throw new CommandException("Needs to be re-written again");
+            Clipboard clipboard = session.getClipboard().getClipboard();
+            Region clipboardRegion = clipboard.getRegion();
+            java.util.Map<Integer, Countable<Integer>> byId = new java.util.HashMap<>();
+            java.util.Map<Integer, Countable<BaseBlock>> byIdAndData = new java.util.HashMap<>();
+            int counted = 0;
+            for (Vector position : clipboardRegion) {
+                BaseBlock block = clipboard.getBlock(position);
+                counted++;
+                if (useData) {
+                    int key = (block.getId() << 4) + (block.getData() & 15);
+                    Countable<BaseBlock> count = byIdAndData.get(key);
+                    if (count == null) {
+                        byIdAndData.put(key, new Countable<>(new BaseBlock(block.getId(), block.getData() & 15), 1));
+                    } else {
+                        count.increment();
+                    }
+                } else {
+                    Countable<Integer> count = byId.get(block.getId());
+                    if (count == null) {
+                        byId.put(block.getId(), new Countable<>(block.getId(), 1));
+                    } else {
+                        count.increment();
+                    }
+                }
+            }
+            if (useData) {
+                distributionData = new ArrayList<>(byIdAndData.values());
+                java.util.Collections.sort(distributionData, java.util.Collections.reverseOrder());
+            } else {
+                distribution = new ArrayList<>(byId.values());
+                java.util.Collections.sort(distribution, java.util.Collections.reverseOrder());
+            }
+            size = counted;
         } else {
             if (useData) {
                 distributionData = editSession.getBlockDistributionWithData(session.getSelection(player.getWorld()));
