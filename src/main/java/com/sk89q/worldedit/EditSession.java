@@ -3230,7 +3230,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         for (final Vector v : vset) {
             final int tipx = v.getBlockX(), tipy = v.getBlockY(), tipz = v.getBlockZ();
             for (int loopx = tipx - ceilrad; loopx <= (tipx + ceilrad); loopx++) {
-                for (int loopy = tipy - ceilrad; loopy <= (tipy + ceilrad); loopy++) {
+                // Stay inside the world: there is nothing to set outside it, and the set
+                // refuses those positions with an exception
+                for (int loopy = Math.max(0, tipy - ceilrad); loopy <= Math.min(getMaxY(), tipy + ceilrad); loopy++) {
                     for (int loopz = tipz - ceilrad; loopz <= (tipz + ceilrad); loopz++) {
                         if (MathMan.hypot(loopx - tipx, loopy - tipy, loopz - tipz) <= radius) {
                             returnset.add(loopx, loopy, loopz);
