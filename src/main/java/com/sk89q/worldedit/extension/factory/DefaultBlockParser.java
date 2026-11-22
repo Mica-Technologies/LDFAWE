@@ -135,7 +135,9 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
         CompoundTag nbt = null;
 
         boolean parseDataValue = true;
-        switch (testId.substring(0, Math.min(testId.length(), 4))) {
+        // Only "slot" takes a suffix (slot1, slot2, ...); "pos1" and "hand" must be the whole name,
+        // or names such as "handrail" would quietly resolve to the held or selected block.
+        switch (testId.startsWith("slot") ? "slot" : testId) {
             case "pos1": {
                 // Get the block type from the "primary position"
                 final World world = context.requireWorld();
@@ -189,7 +191,12 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
                 // Attempt to parse the item ID or otherwise resolve an item/block
                 // name to its numeric ID
                 if (MathMan.isInteger(testId)) {
-                    blockId = Integer.parseInt(testId);
+                    try {
+                        blockId = Integer.parseInt(testId);
+                    } catch (NumberFormatException e) {
+                        // isInteger accepts any run of digits, including ones too large for an int
+                        throw new NoMatchException("Does not match a valid block type: '" + input + "'");
+                    }
                     blockType = BlockType.fromID(blockId);
                 } else {
                     BundledBlockData.BlockEntry block = BundledBlockData.getInstance().findById(testId);
@@ -260,8 +267,15 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
                 if (typeAndData.length > 1 && !typeAndData[1].isEmpty()) {
                     if (MathMan.isInteger(typeAndData[1])) {
                         data = Integer.parseInt(typeAndData[1]);
+                        // -1 is the typed form of the match-any wildcard; no other negative is a data value
+                        if (data < -1 || (data == -1 && context.isRestricted())) {
+                            throw new NoMatchException("Invalid data value '" + typeAndData[1] + "'");
+                        }
+                    } else if (typeAndData[1].equals("*")) {
+                        data = -1; // Wildcard, kept or cleared below depending on the context
                     } else {
                         data = -1; // Some invalid value
+                        boolean matched = false;
                         BundledBlockData.BlockEntry block = BundledBlockData.getInstance().findById(blockId);
                         if (block != null && block.states != null) {
                             loop:
@@ -273,11 +287,18 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
                                         if (newData != 0 || blockLocator.length > 1) {
                                             data = valueEntry.getValue().data;
                                         }
+                                        matched = true;
                                         break loop;
                                     }
                                 }
 
                             }
+                        }
+                        if (!matched) {
+                            // Not a state of this block: try the colour and step names handled
+                            // below, which report anything else (including names on blocks with no
+                            // bundled data) as an unknown data value instead of placing data 0.
+                            throw new NumberFormatException(typeAndData[1]);
                         }
                     }
                 }
@@ -415,7 +436,12 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
                     return new NoteBlock(data, (byte) 0);
                 }
 
-                byte note = Byte.parseByte(blockAndExtraData[1]);
+                byte note;
+                try {
+                    note = Byte.parseByte(blockAndExtraData[1]);
+                } catch (NumberFormatException e) {
+                    throw new InputParseException("Invalid note value: '" + blockAndExtraData[1] + "'");
+                }
                 if (note < 0 || note > 24) {
                     throw new InputParseException("Out of range note value: '" + blockAndExtraData[1] + "'");
                 }
