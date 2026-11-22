@@ -19,6 +19,7 @@
 
 package com.sk89q.worldedit.extension.platform;
 
+import com.boydti.fawe.Fawe;
 import com.boydti.fawe.config.BBC;
 import com.boydti.fawe.object.FawePlayer;
 import com.boydti.fawe.object.brush.visualization.VirtualWorld;
@@ -539,12 +540,23 @@ public class PlatformManager {
                     if (tool != null && tool instanceof TraceTool) {
                         if (tool.canUse(player)) {
                             FawePlayer<?> fp = FawePlayer.wrap(player);
-                            fp.runAction(new Runnable() {
-                                @Override
-                                public void run() {
-                                    reset((TraceTool) tool).actPrimary(queryCapability(Capability.WORLD_EDITING), getConfiguration(), player, session);
-                                }
-                            }, false, true);
+                            // One right click on a block reaches here up to three times in the
+                            // same tick: the game sends a use-on-block and a use-item packet for
+                            // the main hand and a use-on-block packet for the off hand, and each
+                            // becomes an input event. Run the tool for the first one only, or a
+                            // single click applies a brush three times and leaves three history
+                            // entries.
+                            long tick = Fawe.get().getTimer().getTick();
+                            long lastTick = fp.getMeta("faweTraceToolTick", Long.MIN_VALUE);
+                            fp.setMeta("faweTraceToolTick", tick);
+                            if (tick > lastTick) {
+                                fp.runAction(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        reset((TraceTool) tool).actPrimary(queryCapability(Capability.WORLD_EDITING), getConfiguration(), player, session);
+                                    }
+                                }, false, true);
+                            }
                             event.setCancelled(true);
                             return;
                         }
