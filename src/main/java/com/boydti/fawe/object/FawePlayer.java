@@ -595,7 +595,7 @@ public abstract class FawePlayer<T> extends Metadatable {
 
     public void setSelection(Region region) {
         RegionSelector selector;
-        switch (region.getClass().getName()) {
+        switch (region.getClass().getSimpleName()) {
             case "ConvexPolyhedralRegion":
                 selector = new ConvexPolyhedralRegionSelector((ConvexPolyhedralRegion) region);
                 break;

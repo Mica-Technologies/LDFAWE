@@ -557,6 +557,13 @@ public class RegionCommands extends MethodCommands {
     @CommandPermissions("fawe.worldeditregion")
     public void wer(Player player) throws WorldEditException {
         FawePlayer<Object> fp = FawePlayer.wrap(player);
+        Region[] allowed = fp.getCurrentRegions();
+        if (allowed.length == 1 && allowed[0].isGlobal()) {
+            // Restrictions are off or bypassed, so the only "region" is the whole world; selecting
+            // it would replace the player's selection with one spanning the full coordinate range.
+            fp.sendMessage(BBC.getPrefix() + "No region restriction applies to you, so your selection was left unchanged.");
+            return;
+        }
         final Region region = fp.getLargestRegion();
         if (region == null) {
             BBC.NO_REGION.send(fp);
