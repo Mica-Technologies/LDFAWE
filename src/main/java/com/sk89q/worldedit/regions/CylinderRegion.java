@@ -41,7 +41,12 @@ import static com.google.common.base.Preconditions.checkNotNull;
 public class CylinderRegion extends AbstractRegion implements FlatRegion {
 
     private BlockVector2D center;
-    private BlockVector2D radius;
+    /**
+     * The radii plus 0.5 on each axis. The padding makes a radius of N reach exactly N blocks from the
+     * center, and keeps a zero radius one block thick rather than empty; rounding it to whole blocks
+     * would lose it.
+     */
+    private Vector2D radius;
     private Vector2D radiusInverse;
     private int minY;
     private int maxY;
@@ -155,8 +160,19 @@ public class CylinderRegion extends AbstractRegion implements FlatRegion {
      * @param radius the radius along the X and Z axes
      */
     public void setRadius(Vector2D radius) {
-        this.radius = radius.add(0.5, 0.5).toBlockVector2D();
-        this.radiusInverse = Vector2D.ONE.divide(radius);
+        this.radius = new Vector2D(radius.getX() + 0.5, radius.getZ() + 0.5);
+        this.radiusInverse = Vector2D.ONE.divide(this.radius);
+    }
+
+    /**
+     * The furthest whole number of blocks from the center that {@link #contains} accepts on one axis.
+     */
+    private static int reach(double paddedRadius) {
+        return (int) Math.floor(paddedRadius);
+    }
+
+    private Vector2D reach() {
+        return new Vector2D(reach(radius.getX()), reach(radius.getZ()));
     }
 
     /**
@@ -190,12 +206,12 @@ public class CylinderRegion extends AbstractRegion implements FlatRegion {
 
     @Override
     public Vector getMinimumPoint() {
-        return center.subtract(getRadius()).toVector(getMinimumY());
+        return center.subtract(reach()).toVector(getMinimumY());
     }
 
     @Override
     public Vector getMaximumPoint() {
-        return center.add(getRadius()).toVector(getMaximumY());
+        return center.add(reach()).toVector(getMaximumY());
     }
 
     @Override
@@ -222,7 +238,7 @@ public class CylinderRegion extends AbstractRegion implements FlatRegion {
 
     @Override
     public int getWidth() {
-        return (int) (2 * radius.getX());
+        return 2 * reach(radius.getX()) + 1;
     }
 
     @Override
@@ -232,7 +248,7 @@ public class CylinderRegion extends AbstractRegion implements FlatRegion {
 
     @Override
     public int getLength() {
-        return (int) (2 * radius.getZ());
+        return 2 * reach(radius.getZ()) + 1;
     }
 
     private Vector2D calculateDiff2D(Vector... changes) throws RegionOperationException {
@@ -267,7 +283,7 @@ public class CylinderRegion extends AbstractRegion implements FlatRegion {
     @Override
     public void expand(Vector... changes) throws RegionOperationException {
         center = center.add(calculateDiff2D(changes)).toBlockVector2D();
-        radius = radius.add(calculateChanges2D(changes)).toBlockVector2D();
+        radius = radius.add(calculateChanges2D(changes));
         this.radiusInverse = Vector2D.ONE.divide(radius);
         for (Vector change : changes) {
             int changeY = change.getBlockY();
@@ -289,7 +305,7 @@ public class CylinderRegion extends AbstractRegion implements FlatRegion {
     public void contract(Vector... changes) throws RegionOperationException {
         center = center.subtract(calculateDiff2D(changes)).toBlockVector2D();
         Vector2D newRadius = radius.subtract(calculateChanges2D(changes));
-        radius = Vector2D.getMaximum(new Vector2D(1.5, 1.5), newRadius).toBlockVector2D();
+        radius = Vector2D.getMaximum(new Vector2D(1.5, 1.5), newRadius);
         this.radiusInverse = Vector2D.ONE.divide(radius);
         for (Vector change : changes) {
             int height = maxY - minY;
