@@ -56,6 +56,12 @@ public class ForgeTaskMan extends TaskManager {
 
     @SubscribeEvent(priority = EventPriority.HIGHEST)
     public void onServerTick(TickEvent.ServerTickEvent event) {
+        // Forge posts this event at the start and at the end of every tick. Running on both
+        // halved every tick delay and repeat interval and let the per-tick time budget be
+        // spent twice.
+        if (event.phase != TickEvent.Phase.END) {
+            return;
+        }
         Fawe.get().setMainThread();
         int asyncSize = asyncTasks.size();
         for (int i = 0; i < asyncSize; i++) {
