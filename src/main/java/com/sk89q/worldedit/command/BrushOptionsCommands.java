@@ -319,8 +319,8 @@ public class BrushOptionsCommands extends MethodCommands {
 
     @Command(
             aliases = {"scroll"},
-            usage = "[none|clipboard|mask|pattern|range|size|visual|target|targetoffset]",
-            desc = "Toggle between different target modes",
+            usage = "[none|clipboard|mask|pattern|range|size|target|targetoffset]",
+            desc = "Set what scrolling with the brush changes",
             min = 1,
             max = -1
     )
@@ -331,15 +331,21 @@ public class BrushOptionsCommands extends MethodCommands {
             return;
         }
         BrushSettings settings = offHand ? bt.getOffHand() : bt.getContext();
+        if (!ScrollAction.isAction(args.getString(0))) {
+            player.printError(BBC.getPrefix() + "Unknown scroll action '" + args.getString(0) + "'. Choose from: " + ScrollAction.VALID_ACTIONS);
+            return;
+        }
         ScrollAction action = ScrollAction.fromArguments(bt, player, session, args.getJoinedStrings(0), true);
-        settings.setScrollAction(action);
         if (args.getString(0).equalsIgnoreCase("none")) {
+            settings.setScrollAction(null);
             BBC.BRUSH_SCROLL_ACTION_UNSET.send(player);
         } else if (action != null) {
+            settings.setScrollAction(action);
             String full = args.getJoinedStrings(0);
             settings.addSetting(BrushSettings.SettingType.SCROLL_ACTION, full);
             BBC.BRUSH_SCROLL_ACTION_SET.send(player, full);
         }
+        // Otherwise fromArguments has already told the player what was wrong, and the old action stays.
         bt.update();
     }
 

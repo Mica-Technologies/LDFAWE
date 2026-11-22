@@ -1265,8 +1265,8 @@ scroll:
   help: ''
   aliases:
   - scroll
-  usage: '[none|clipboard|mask|pattern|range|size|visual|target]'
-  desc: Переключение между различными режимами цели
+  usage: '[none|clipboard|mask|pattern|range|size|target|targetoffset]'
+  desc: Выбор того, что меняет прокрутка колесом с кистью
 pull:
   help: Выбирает кисть поднятия
   aliases:

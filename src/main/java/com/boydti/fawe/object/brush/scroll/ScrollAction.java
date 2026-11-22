@@ -17,6 +17,31 @@ import java.io.IOException;
 public abstract class ScrollAction implements ScrollTool {
     private BrushTool tool;
 
+    /**
+     * The action names {@link #fromArguments} understands, for telling a player what they can choose from.
+     */
+    public static final String VALID_ACTIONS = "none, clipboard, mask, pattern, range, size, target, targetoffset";
+
+    /**
+     * Whether the first word of a scroll command names an action {@link #fromArguments} understands. An unknown name
+     * makes fromArguments return null just like "none", so the command checks this first to tell the two apart.
+     */
+    public static boolean isAction(String name) {
+        switch (name.toLowerCase()) {
+            case "none":
+            case "clipboard":
+            case "mask":
+            case "pattern":
+            case "targetoffset":
+            case "range":
+            case "size":
+            case "target":
+                return true;
+            default:
+                return false;
+        }
+    }
+
     public static ScrollAction fromArguments(BrushTool tool, Player player, LocalSession session, String arguments, boolean message) throws InputParseException {
         ParserContext parserContext = new ParserContext();
         parserContext.setActor(player);

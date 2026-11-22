@@ -1706,8 +1706,8 @@ BrushOptionsCommands:
     help: ''
     aliases:
     - scroll
-    usage: '[none|clipboard|mask|pattern|range|size|visual|target]'
-    desc: Cambiar entre diferentes modos de destino
+    usage: '[none|clipboard|mask|pattern|range|size|target|targetoffset]'
+    desc: Elegir qué cambia al girar la rueda con el pincel
   targetmask:
     help: ''
     aliases:
