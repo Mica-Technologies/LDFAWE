@@ -272,7 +272,7 @@ tips:
   tip_farwand: "&7Hatırlatma: &aUzak Noktaları Seçmek İçin: &c//farwand"
   tip_lazycut: "&7Hatırlatma: &aBu Komutu Kullanmak Daha Güvenli: &c//lazycut"
   tip_fast: "&7Hatırlatma: &aHızlıca Geri Almak İçin: &c//fast"
-  tip_cancel: "&7Hatırlatma: &aDevam Eden Düzenlemeyi İptal Etmek İçin: &c//cancel"
+  tip_cancel: "&7Hatırlatma: &aDevam Eden Düzenlemeyi İptal Etmek İçin: &c/fcancel"
   tip_mask: "&7Hatırlatma: &aGenel Hedef Maskesi Ayarlamak İçin: &c/gmask"
   tip_mask_angle: "&7Hatırlatma: &a3-20 Bloktan Yukarısını Değiştirmek İçin: &c//replace /[-20][-3] bedrock"
   tip_set_linear: "&7Hatırlatma: &aBlokları Doğrusal Olarak Ayarlamak İçin: &c//set #l3d[wood,bedrock]"

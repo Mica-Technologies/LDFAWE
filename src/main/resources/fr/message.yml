@@ -314,7 +314,7 @@ tips:
   tip_discord: 'Besoin d''aide ? Aide en anglais disponible : https://discord.gg/ngZCzbU'
   tip_lazycut: '&7Conseil, Il est plus sûr d''utiliser &c//lazycut'
   tip_fast: '&7Astuce, Définir rapidement et sans défaire en utilisant &c//fas'
-  tip_cancel: '&7Astuce, Vous pouvez &c//cancel &7et éditer en cours de traitement.'
+  tip_cancel: '&7Astuce, Vous pouvez &c/fcancel &7et éditer en cours de traitement.'
   tip_mask: '&7Astuce, Définir un masque de destination globale avec &c/gmask'
   tip_mask_angle: '&7Astuce, Remplacer les pentes ascendantes de 3-20 blocs en faisant&c
     //replace /[-20][-3] bedrock'

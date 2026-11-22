@@ -310,7 +310,7 @@ tips:
   tip_farwand: '提示: 请使用 &c//farwand &7选择远方的点'
   tip_lazycut: '&7提示: 使用 &c//lazycut &7更为安全'
   tip_fast: '&7提示: 请使用 &c//fast &7在不撤销的情况下快速放置方块'
-  tip_cancel: '&7提示: 你可使用 &c//cancel &7取消进行中的编辑'
+  tip_cancel: '&7提示: 你可使用 &c/fcancel &7取消进行中的编辑'
   tip_mask: '&7提示: 请使用 &c/gmask &7设置全局终点蒙版'
   tip_mask_angle: '提示: 请使用 &c//replace /[-20][-3] bedrock &7替换 3-20 个方块的上坡'
   tip_set_linear: '&7提示: 请使用 &c//set #l3d[wood,bedrock] &7线性放置方块'

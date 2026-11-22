@@ -313,7 +313,7 @@ selection:
   sel_list: Für eine Liste der Selektoren nutze:&c //sel
   sel_modes: 'Wähle einen der unten aufgelisteten Modi:'
 tips:
-  tip_cancel: 'Tipp: Du kannst eine Aktion mit `//cancel` abbrechen'
+  tip_cancel: 'Tipp: Du kannst eine Aktion mit `/fcancel` abbrechen'
   tip_download: 'Tipp: Du kannst deine Zwischenablage mit `//download` herunterladen'
   tip_sel_list: 'Tipp: Liste die verschiedenen Selektoren auf mit &c//sel list'
   tip_select_connected: 'Tipp: Wähle alle verbundenen Blöcke mit &c//sel fuzzy'

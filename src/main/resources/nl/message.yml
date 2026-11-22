@@ -301,7 +301,7 @@ tips:
   tip_farwand: 'Tip: Selecteer punten van ver weg met &c//farwand'
   tip_lazycut: '&7Tip: Het is veiliger om &c//lazycut te gebruiken'
   tip_fast: '&7Tip: Set fast and without undo using &c//fast'
-  tip_cancel: '&7Tip: gebruik &c//cancel &7 om een edit stop te zetten'
+  tip_cancel: '&7Tip: gebruik &c/fcancel &7 om een edit stop te zetten'
   tip_mask: '&7Tip: Zet een globale bestemmings mask met &c/gmask'
   tip_mask_angle: 'Tip: Vervang opwaartse hellingen van 3-20 blocks met&c //replace /[-20][-3]
     bedrock'
