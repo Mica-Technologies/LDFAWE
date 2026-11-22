@@ -41,11 +41,13 @@ public class EllipsoidRegion extends AbstractRegion {
     private MutableBlockVector center;
 
     /**
-     * Stores the radii plus 0.5 on each axis.
+     * Stores the radii plus 0.5 on each axis. The padding makes a radius of N reach exactly N blocks
+     * from the center, and keeps a zero radius one block thick rather than empty. It has to be kept
+     * as doubles: rounding it to whole blocks loses the padding.
      */
-    private MutableBlockVector radius;
-    private MutableBlockVector radiusSqr;
-    private int radiusLengthSqr;
+    private Vector radius;
+    private Vector radiusSqr;
+    private double radiusLengthSqr;
     private boolean sphere;
 
     /**
@@ -80,14 +82,25 @@ public class EllipsoidRegion extends AbstractRegion {
         this(ellipsoidRegion.world, ellipsoidRegion.center, ellipsoidRegion.getRadius());
     }
 
+    /**
+     * The furthest whole number of blocks from the center that {@link #contains} accepts on one axis.
+     */
+    private static int reach(double paddedRadius) {
+        return (int) Math.floor(paddedRadius);
+    }
+
+    private Vector reach() {
+        return new Vector(reach(radius.getX()), reach(radius.getY()), reach(radius.getZ()));
+    }
+
     @Override
     public Vector getMinimumPoint() {
-        return center.subtract(getRadius()).clampY(0, 255);
+        return center.subtract(reach()).clampY(0, 255);
     }
 
     @Override
     public Vector getMaximumPoint() {
-        return center.add(getRadius()).clampY(0, 255);
+        return center.add(reach()).clampY(0, 255);
     }
 
     @Override
@@ -98,17 +111,17 @@ public class EllipsoidRegion extends AbstractRegion {
 
     @Override
     public int getWidth() {
-        return (int) (2 * radius.getX());
+        return 2 * reach(radius.getX()) + 1;
     }
 
     @Override
     public int getHeight() {
-        return Math.min((int) (2 * radius.getY()), 256);
+        return getMaximumPoint().getBlockY() - getMinimumPoint().getBlockY() + 1;
     }
 
     @Override
     public int getLength() {
-        return (int) (2 * radius.getZ());
+        return 2 * reach(radius.getZ()) + 1;
     }
 
     private Vector calculateDiff(Vector... changes) throws RegionOperationException {
@@ -134,14 +147,14 @@ public class EllipsoidRegion extends AbstractRegion {
     @Override
     public void expand(Vector... changes) throws RegionOperationException {
         center = new MutableBlockVector(center.add(calculateDiff(changes)));
-        setRadius(radius.add(calculateChanges(changes)));
+        setRadius(getRadius().add(calculateChanges(changes)));
     }
 
     @Override
     public void contract(Vector... changes) throws RegionOperationException {
         center = new MutableBlockVector(center.subtract(calculateDiff(changes)));
-        Vector newRadius = radius.subtract(calculateChanges(changes));
-        setRadius(Vector.getMaximum(new Vector(1.5, 1.5, 1.5), newRadius));
+        Vector newRadius = getRadius().subtract(calculateChanges(changes));
+        setRadius(Vector.getMaximum(new Vector(1, 1, 1), newRadius));
     }
 
     @Override
@@ -184,14 +197,10 @@ public class EllipsoidRegion extends AbstractRegion {
      * @param radius the radius
      */
     public void setRadius(Vector radius) {
-        this.radius = new MutableBlockVector(radius.add(0.5, 0.5, 0.5));
-        radiusSqr = new MutableBlockVector(radius.multiply(radius));
-        radiusLengthSqr = radiusSqr.getBlockX();
-        if (radius.getBlockY() == radius.getBlockX() && radius.getBlockX() == radius.getBlockZ()) {
-            this.sphere = true;
-        } else {
-            this.sphere = false;
-        }
+        this.radius = new Vector(radius.getX() + 0.5, radius.getY() + 0.5, radius.getZ() + 0.5);
+        radiusSqr = new Vector(this.radius.getX() * this.radius.getX(), this.radius.getY() * this.radius.getY(), this.radius.getZ() * this.radius.getZ());
+        radiusLengthSqr = radiusSqr.getX();
+        this.sphere = radius.getX() == radius.getY() && radius.getX() == radius.getZ();
     }
 
     @Override
@@ -222,25 +231,25 @@ public class EllipsoidRegion extends AbstractRegion {
     public boolean contains(Vector position) {
         int cx = position.getBlockX() - center.getBlockX();
         int cx2 = cx * cx;
-        if (cx2 > radiusSqr.getBlockX()) {
+        if (cx2 > radiusSqr.getX()) {
             return false;
         }
         int cz = position.getBlockZ() - center.getBlockZ();
         int cz2 = cz * cz;
-        if (cz2 > radiusSqr.getBlockZ()) {
+        if (cz2 > radiusSqr.getZ()) {
             return false;
         }
         int cy = position.getBlockY() - center.getBlockY();
         int cy2 = cy * cy;
-        if (radiusSqr.getBlockY() < 255 && cy2 > radiusSqr.getBlockY()) {
+        if (cy2 > radiusSqr.getY()) {
             return false;
         }
         if (sphere) {
             return cx2 + cy2 + cz2 <= radiusLengthSqr;
         }
-        double cxd = (double) cx / radius.getBlockX();
-        double cyd = (double) cy / radius.getBlockY();
-        double czd = (double) cz / radius.getBlockZ();
+        double cxd = cx / radius.getX();
+        double cyd = cy / radius.getY();
+        double czd = cz / radius.getZ();
         return cxd * cxd + cyd * cyd + czd * czd <= 1;
     }
 
