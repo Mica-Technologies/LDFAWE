@@ -530,7 +530,12 @@ public class UtilityCommands extends MethodCommands {
             killed += visitor.getAffected();
         }
 
-        BBC.KILL_SUCCESS.send(actor, killed, radius);
+        if (radius < 0) {
+            // -1 means every loaded chunk, which the radius message cannot say.
+            actor.print(BBC.getPrefix() + "Killed " + killed + " entities in all loaded chunks.");
+        } else {
+            BBC.KILL_SUCCESS.send(actor, killed, radius);
+        }
 
         if (editSession != null) {
             session.remember(editSession);
@@ -590,7 +595,12 @@ public class UtilityCommands extends MethodCommands {
             removed += visitor.getAffected();
         }
 
-        BBC.KILL_SUCCESS.send(actor, removed, radius);
+        if (radius < 0) {
+            // -1 means every loaded chunk, which the radius message cannot say.
+            actor.print(BBC.getPrefix() + "Killed " + removed + " entities in all loaded chunks.");
+        } else {
+            BBC.KILL_SUCCESS.send(actor, removed, radius);
+        }
 
         if (editSession != null) {
             session.remember(editSession);
