@@ -28,13 +28,11 @@ import com.sk89q.worldedit.util.command.parametric.ParametricBuilder;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class DefaultMaskParser extends FaweParser<Mask> {
     private final Dispatcher dispatcher;
-    private final Pattern INTERSECTION_PATTERN = Pattern.compile("[&|;]+(?![^\\[]*\\])");
 
     public DefaultMaskParser(WorldEdit worldEdit) {
         super(worldEdit);

@@ -50,6 +50,11 @@ public abstract class FaweParser<T> extends InputParser<T> {
         outer:
         for (int i = 0; i < toParse.length(); i++) {
             char c = toParse.charAt(i);
+            if (i == last && c == '=' && (i + 1 >= toParse.length() || toParse.charAt(i + 1) != '[')) {
+                // An unbracketed expression (=y>5&&y<8) runs to the end of the input: its &&, ||
+                // and commas belong to the expression, not to this list
+                break;
+            }
             switch (c) {
                 case ',':
                 case '&':
