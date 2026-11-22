@@ -2225,24 +2225,32 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         radiusX += 0.5;
         radiusZ += 0.5;
 
+        // The base height is kept in a local: the caller's vector is often a live selection point or player position
+        // and must not move.
+        int py = pos.getBlockY();
         if (height == 0) {
             return this.changes;
         } else if (height < 0) {
             height = -height;
-            pos.mutY(pos.getY() - height);
+            py -= height;
         }
 
-        if (pos.getBlockY() < 0) {
-            pos.mutY(0);
-        } else if (((pos.getBlockY() + height) - 1) > maxY) {
-            height = (maxY - pos.getBlockY()) + 1;
+        // Clip the part below the world off the height too, so the top stays where it was asked for.
+        if (py < 0) {
+            height += py;
+            py = 0;
+        }
+        if (((py + height) - 1) > maxY) {
+            height = (maxY - py) + 1;
+        }
+        if (height <= 0) {
+            return this.changes;
         }
 
         final double invRadiusX = 1 / (radiusX);
         final double invRadiusZ = 1 / (radiusZ);
 
         int px = pos.getBlockX();
-        int py = pos.getBlockY();
         int pz = pos.getBlockZ();
         MutableBlockVector mutable = new MutableBlockVector();
 
