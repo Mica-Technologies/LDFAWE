@@ -385,11 +385,19 @@ public class BrushTool implements DoubleActionTraceTool, ScrollTool, MovableTool
         this.range = range;
     }
 
+    /**
+     * A trace that reaches no block gives null. Pass that on, so the caller can tell the
+     * player there is no block in range.
+     */
+    private Vector offsetTarget(Vector traced, Location loc) {
+        return traced == null ? null : offset(new MutableBlockVector(traced), loc.toVector());
+    }
+
     public Vector getPosition(EditSession editSession, Player player) {
         Location loc = player.getLocation();
         switch (targetMode) {
             case TARGET_BLOCK_RANGE:
-                return offset(new MutableBlockVector(trace(editSession, player, getRange(), true)), loc.toVector());
+                return offsetTarget(trace(editSession, player, getRange(), true), loc);
             case FOWARD_POINT_PITCH: {
                 int d = 0;
                 float pitch = loc.getPitch();
@@ -411,10 +419,10 @@ public class BrushTool implements DoubleActionTraceTool, ScrollTool, MovableTool
                     }
                 }
                 final int distance = (height - y) + 8;
-                return offset(new MutableBlockVector(trace(editSession, player, distance, true)), loc.toVector());
+                return offsetTarget(trace(editSession, player, distance, true), loc);
             }
             case TARGET_FACE_RANGE:
-                return offset(new MutableBlockVector(trace(editSession, player, getRange(), true)), loc.toVector());
+                return offsetTarget(trace(editSession, player, getRange(), true), loc);
             default:
                 return null;
         }
