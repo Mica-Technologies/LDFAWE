@@ -2009,8 +2009,11 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             Mask existing = new ExistingBlockMask(EditSession.this);
             copy.setSourceMask(sourceMask == null ? existing : new MaskIntersection(sourceMask, existing));
         }
+        int before = this.changes;
         Operations.completeBlindly(copy);
-        return this.changes = copy.getAffected();
+        // Each copied block is set through this session, which counts it. The copy's own total is
+        // the area of one copy only, whatever the count and whether air was skipped.
+        return this.changes - before;
     }
 
     /**
