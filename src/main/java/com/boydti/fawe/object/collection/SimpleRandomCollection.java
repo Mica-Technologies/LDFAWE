@@ -24,6 +24,12 @@ public class SimpleRandomCollection<E> extends RandomCollection<E> {
     }
 
     public E next(int x, int y, int z) {
-        return map.ceilingEntry(random.nextDouble(x, y, z)).getValue();
+        // The keys are running totals of the raw weights, so the 0-1 random value has to be
+        // scaled to that total. Unscaled, it always landed on the first entry.
+        Map.Entry<Double, E> entry = map.higherEntry(random.nextDouble(x, y, z) * total);
+        if (entry == null) {
+            entry = map.lastEntry();
+        }
+        return entry.getValue();
     }
 }
