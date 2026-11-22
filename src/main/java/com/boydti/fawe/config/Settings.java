@@ -9,15 +9,13 @@ public class Settings extends Config {
     @Ignore
     public static final Settings IMP = new Settings();
 
-    @Comment("These first 6 aren't configurable") // This is a comment
+    @Comment("These first 5 aren't configurable") // This is a comment
     @Final // Indicates that this value isn't configurable
-    public final String ISSUES = "https://github.com/boy0001/FastAsyncWorldedit/issues";
+    public final String ISSUES = "https://github.com/Mica-Technologies/LDFAWE/issues";
     @Final
-    public final String WIKI = "https://github.com/boy0001/FastAsyncWorldedit/wiki/";
+    public String VERSION; // These values are set from FAWE before loading
     @Final
     public String DATE; // These values are set from FAWE before loading
-    @Final
-    public String BUILD; // These values are set from FAWE before loading
     @Final
     public String COMMIT; // These values are set from FAWE before loading
     @Final
@@ -26,12 +24,6 @@ public class Settings extends Config {
     @Comment({"Options: cn, de, es, fr, it, nl, ru, tr",
             "Create a PR to contribute a translation: https://github.com/boy0001/FastAsyncWorldedit/new/master/core/src/main/resources",})
     public String LANGUAGE = "";
-    @Comment({"Enable or disable automatic updates",
-            " - true = update automatically in the background",
-            " - confirm = prompt an admin to confirm each update",
-            " - false = do not update the plugin"
-    })
-    public String UPDATE = "confirm";
     @Comment({"Send anonymous usage statistics to bStats (upstream FAWE's account).",
             " - Off by default in this fork"})
     public boolean METRICS = false;

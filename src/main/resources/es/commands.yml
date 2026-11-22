@@ -2073,7 +2073,7 @@ WorldEditCommands:
     - we
     - fawe
     usage: ''
-    desc: Actualización, información, depuración y comandos de ayuda
+    desc: Información, depuración y comandos de ayuda
   cui:
     help: ''
     aliases:
@@ -2086,13 +2086,6 @@ WorldEditCommands:
     - tz
     usage: '[tiempo de la zona]'
     desc: Establecer tu zona horaria para snapshots
-  changelog:
-    help: ''
-    aliases:
-    - changelog
-    - cl
-    usage: ''
-    desc: Ver el registro de cambios de FAWE
   debugpaste:
     help: ''
     aliases:

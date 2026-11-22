@@ -145,7 +145,6 @@ public class Fawe {
     private final FaweTimer timer;
     private FaweVersion version;
     private VisualQueue visualQueue;
-    private Updater updater;
     private TextureUtil textures;
     private DefaultTransformParser transformParser;
     private ChatManager chatManager = new PlainChatManager();
@@ -286,27 +285,12 @@ public class Fawe {
         }, 0);
 
         TaskManager.IMP.repeat(timer, 1);
-
-        if (!Settings.IMP.UPDATE.equalsIgnoreCase("false")) {
-            // Delayed updating
-            updater = new Updater();
-            TaskManager.IMP.async(() -> update());
-            TaskManager.IMP.repeatAsync(() -> update(), 36000);
-        }
     }
 
     public void onDisable() {
         if (stats != null) {
             stats.close();
         }
-    }
-
-    private boolean update() {
-        if (updater != null) {
-            updater.getUpdate(IMP.getPlatform(), getVersion());
-            return true;
-        }
-        return false;
     }
 
     public CUI getCUI(Actor actor) {
@@ -344,16 +328,6 @@ public class Fawe {
 
     public DefaultTransformParser getTransformParser() {
         return transformParser;
-    }
-
-    /**
-     * The FAWE updater class
-     * - Use to get basic update information (changelog/version etc)
-     *
-     * @return
-     */
-    public Updater getUpdater() {
-        return updater;
     }
 
     public TextureUtil getCachedTextureUtil(boolean randomize, int min, int max) {
@@ -437,16 +411,18 @@ public class Fawe {
         // Setting up config.yml
         File file = new File(this.IMP.getDirectory(), "config.yml");
         Settings.IMP.PLATFORM = IMP.getPlatform().replace("\"", "");
+        String versionString = "";
         try {
             InputStream stream = getClass().getResourceAsStream("/fawe.properties");
             java.util.Scanner scanner = new java.util.Scanner(stream).useDelimiter("\\A");
-            String versionString = scanner.next().trim();
+            versionString = scanner.next().trim();
             scanner.close();
-            this.version = new FaweVersion(versionString);
-            Settings.IMP.DATE = new Date(100 + version.year, version.month, version.day).toGMTString();
-            Settings.IMP.BUILD = "https://ci.athion.net/job/FastAsyncWorldEdit/" + version.build;
-            Settings.IMP.COMMIT = "https://github.com/boy0001/FastAsyncWorldedit/commit/" + Integer.toHexString(version.hash);
         } catch (Throwable ignore) {}
+        // FaweVersion accepts any text, so the version is never null once the configs are set up.
+        this.version = new FaweVersion(versionString);
+        Settings.IMP.VERSION = version.toString();
+        Settings.IMP.DATE = version.hasDate() ? version.getDate() : "unknown";
+        Settings.IMP.COMMIT = version.commit != null ? "https://github.com/Mica-Technologies/LDFAWE/commit/" + version.commit : "unknown";
         Settings.IMP.reload(file);
         // Setting up message.yml
         String lang = Objects.toString(Settings.IMP.LANGUAGE);
@@ -642,9 +618,8 @@ public class Fawe {
             debug(" - Using the latest version of WorldEdit/FAWE");
             debug(" - AsyncWorldEdit/WorldEditRegions isn't installed");
             debug(" - Any other errors in the startup log");
-            debug("Contact Empire92 if you need assistance:");
-            debug(" - Send me a PM or ask on Discord");
-            debug(" - https://discord.gg/ngZCzbU");
+            debug("Report it with the startup log at:");
+            debug(" - https://github.com/Mica-Technologies/LDFAWE/issues");
             debug("=======================================");
         }
         if (!Settings.IMP.EXPERIMENTAL.DISABLE_NATIVES) {
