@@ -20,7 +20,6 @@
 package com.sk89q.worldedit.extension.platform;
 
 import com.boydti.fawe.Fawe;
-import com.boydti.fawe.command.AnvilCommands;
 import com.boydti.fawe.command.CFICommand;
 import com.boydti.fawe.command.MaskBinding;
 import com.boydti.fawe.command.PatternBinding;
@@ -254,10 +253,10 @@ public final class CommandManager {
         commandMap.clear();
         methodMap.clear();
 
+        // The /anvil commands are deliberately not registered. They rewrite region files
+        // directly, and on a loaded world nothing saves, unloads or locks the live chunks
+        // first, so they can lose or corrupt chunks. AnvilCommands is kept for reference.
         dispatcher = graph
-                .group("/anvil")
-                .describeAs("Anvil command")
-                .registerMethods(new AnvilCommands(worldEdit)).parent()
                 .registerMethods(new BiomeCommands(worldEdit))
                 .registerMethods(new ChunkCommands(worldEdit))
                 .registerMethods(new ClipboardCommands(worldEdit))
