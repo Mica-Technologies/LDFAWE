@@ -386,7 +386,7 @@ public class PatternCommands extends MethodCommands {
     )
     public Pattern linear(Actor actor, LocalSession session, Pattern other) {
         if (other instanceof RandomPattern) {
-            Set<Pattern> patterns = ((RandomPattern) other).getPatterns();
+            java.util.List<Pattern> patterns = ((RandomPattern) other).getSequence();
             return new LinearBlockPattern(patterns.toArray(new Pattern[patterns.size()]));
         }
         return other;
@@ -401,7 +401,7 @@ public class PatternCommands extends MethodCommands {
     )
     public Pattern linear3d(Actor actor, LocalSession session, Pattern other) {
         if (other instanceof RandomPattern) {
-            Set<Pattern> patterns = ((RandomPattern) other).getPatterns();
+            java.util.List<Pattern> patterns = ((RandomPattern) other).getSequence();
             return new Linear3DBlockPattern(patterns.toArray(new Pattern[patterns.size()]));
         }
         return other;
@@ -416,7 +416,7 @@ public class PatternCommands extends MethodCommands {
     )
     public Pattern linear2d(Actor actor, LocalSession session, Pattern other) {
         if (other instanceof RandomPattern) {
-            Set<Pattern> patterns = ((RandomPattern) other).getPatterns();
+            java.util.List<Pattern> patterns = ((RandomPattern) other).getSequence();
             return new Linear2DBlockPattern(patterns.toArray(new Pattern[patterns.size()]));
         }
         return other;

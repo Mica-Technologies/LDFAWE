@@ -7,8 +7,10 @@ import com.sk89q.worldedit.Vector;
 import com.sk89q.worldedit.WorldEditException;
 import com.sk89q.worldedit.blocks.BaseBlock;
 import com.sk89q.worldedit.extent.Extent;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -24,6 +26,7 @@ public class RandomPattern extends AbstractPattern {
     private Map<Pattern, Double> weights = new HashMap<>();
     private RandomCollection<Pattern> collection;
     private LinkedHashSet<Pattern> patterns = new LinkedHashSet<>();
+    private final List<Pattern> sequence = new ArrayList<>();
 
     public RandomPattern() {
         this(new TrueRandom());
@@ -49,6 +52,15 @@ public class RandomPattern extends AbstractPattern {
         weights.put(pattern, chance);
         collection = RandomCollection.of(weights, random);
         this.patterns.add(pattern);
+        this.sequence.add(pattern);
+    }
+
+    /**
+     * Every pattern in the order it was added, repeats included: stone,stone,dirt stays three
+     * entries long. The linear patterns step through this list.
+     */
+    public List<Pattern> getSequence() {
+        return sequence;
     }
 
     public Set<Pattern> getPatterns() {
