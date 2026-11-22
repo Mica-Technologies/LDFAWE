@@ -24,6 +24,8 @@ import com.boydti.fawe.jnbt.NBTException;
 import com.boydti.fawe.util.MathMan;
 import com.boydti.fawe.util.StringMan;
 import com.sk89q.jnbt.CompoundTag;
+import com.sk89q.jnbt.ShortTag;
+import com.sk89q.jnbt.StringTag;
 import com.sk89q.jnbt.Tag;
 import com.sk89q.worldedit.BlockVector;
 import com.sk89q.worldedit.IncompleteRegionException;
@@ -108,6 +110,27 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
             }
             throw e;
         }
+    }
+
+    /**
+     * A spawner made from a mob name. WorldEdit's spawner block leaves its timings and ranges at
+     * 0, which the game takes literally and the spawner never spawns, so it gets vanilla's
+     * defaults. Spawners given NBT (copied, pasted or typed as {...}) never come through here.
+     */
+    static MobSpawnerBlock spawnerWithDefaults(int data, String mobName) {
+        MobSpawnerBlock spawner = new MobSpawnerBlock(data, mobName);
+        Map<String, Tag> values = new HashMap<>();
+        values.put("id", new StringTag("MobSpawner"));
+        values.put("EntityId", new StringTag(mobName));
+        values.put("Delay", new ShortTag((short) 20));
+        values.put("MinSpawnDelay", new ShortTag((short) 200));
+        values.put("MaxSpawnDelay", new ShortTag((short) 800));
+        values.put("SpawnCount", new ShortTag((short) 4));
+        values.put("MaxNearbyEntities", new ShortTag((short) 6));
+        values.put("RequiredPlayerRange", new ShortTag((short) 16));
+        values.put("SpawnRange", new ShortTag((short) 4));
+        spawner.setNbtData(new CompoundTag(values));
+        return spawner;
     }
 
     private BaseBlock parseLogic(String input, ParserContext context)
@@ -425,9 +448,9 @@ public class DefaultBlockParser extends InputParser<BaseBlock> {
                     if (!worldEdit.getServer().isValidMobType(mobName)) {
                         throw new NoMatchException("Unknown mob type '" + mobName + "'");
                     }
-                    return new MobSpawnerBlock(data, mobName);
+                    return spawnerWithDefaults(data, mobName);
                 } else {
-                    return new MobSpawnerBlock(data, MobType.PIG.getName());
+                    return spawnerWithDefaults(data, MobType.PIG.getName());
                 }
 
             case NOTE_BLOCK:
