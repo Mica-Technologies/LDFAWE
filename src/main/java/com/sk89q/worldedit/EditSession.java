@@ -3019,8 +3019,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             }
         }, this);
         Operations.completeBlindly(visitor);
-        changes += visitor.getAffected();
-        return changes;
+        // setBlockFast already counted every block it was asked to set; the visitor counts only
+        // the ones that changed, which is the number to report
+        return this.changes = visitor.getAffected();
     }
 
     /**
