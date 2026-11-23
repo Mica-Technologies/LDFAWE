@@ -1140,8 +1140,10 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
     public int setBlocks(final Set<Vector> vset, final Pattern pattern) {
         RegionVisitor visitor = new RegionVisitor(vset, new BlockReplace(extent, pattern), this);
         Operations.completeBlindly(visitor);
-        changes += visitor.getAffected();
-        return changes;
+        // Report this call's blocks, not everything the session has changed so far.
+        int affected = visitor.getAffected();
+        changes += affected;
+        return affected;
     }
 
     /**
@@ -2232,8 +2234,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
         // The base height is kept in a local: the caller's vector is often a live selection point or player position
         // and must not move.
         int py = pos.getBlockY();
+        final int changesBefore = this.changes;
         if (height == 0) {
-            return this.changes;
+            return 0;
         } else if (height < 0) {
             height = -height;
             py -= height;
@@ -2248,7 +2251,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             height = (maxY - py) + 1;
         }
         if (height <= 0) {
-            return this.changes;
+            return 0;
         }
 
         final double invRadiusX = 1 / (radiusX);
@@ -2296,10 +2299,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     }
 
                     for (int y = 0; y < height; ++y) {
-                        this.setBlock(mutable.setComponents(px + x, py + y, pz + z), block);
-                        this.setBlock(mutable.setComponents(px - x, py + y, pz + z), block);
-                        this.setBlock(mutable.setComponents(px + x, py + y, pz - z), block);
-                        this.setBlock(mutable.setComponents(px - x, py + y, pz - z), block);
+                        setMirroredColumnBlock(mutable, px, py + y, pz, x, z, block);
                     }
                 }
             }
@@ -2330,16 +2330,25 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     }
 
                     for (int y = 0; y < height; ++y) {
-                        this.setBlock(mutable.setComponents(px + x, py + y, pz + z), block);
-                        this.setBlock(mutable.setComponents(px - x, py + y, pz + z), block);
-                        this.setBlock(mutable.setComponents(px + x, py + y, pz - z), block);
-                        this.setBlock(mutable.setComponents(px - x, py + y, pz - z), block);
+                        setMirroredColumnBlock(mutable, px, py + y, pz, x, z, block);
                     }
                 }
             }
         }
 
-        return this.changes;
+        // The session's counter covers every edit made through it; report only this shape.
+        return this.changes - changesBefore;
+    }
+
+    /**
+     * Sets the four mirror images of an offset around a vertical axis. An offset on the axis's centre lines
+     * mirrors onto itself, and setting it again would count one block twice.
+     */
+    private void setMirroredColumnBlock(MutableBlockVector mutable, int px, int y, int pz, int x, int z, Pattern block) {
+        this.setBlock(mutable.setComponents(px + x, y, pz + z), block);
+        if (x != 0) this.setBlock(mutable.setComponents(px - x, y, pz + z), block);
+        if (z != 0) this.setBlock(mutable.setComponents(px + x, y, pz - z), block);
+        if (x != 0 && z != 0) this.setBlock(mutable.setComponents(px - x, y, pz - z), block);
     }
 
     public int makeCircle(Vector pos, final Pattern block, double radiusX, double radiusY, double radiusZ, boolean filled, Vector normal) {
@@ -2456,6 +2465,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      * @throws MaxChangedBlocksException thrown if too many blocks are changed
      */
     public int makeSphere(final Vector pos, final Pattern block, double radiusX, double radiusY, double radiusZ, final boolean filled) {
+        final int changesBefore = this.changes;
         radiusX += 0.5;
         radiusY += 0.5;
         radiusZ += 0.5;
@@ -2509,19 +2519,22 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                         }
                     }
 
+                    // A mirror across an axis the offset lies on is the same block, and setting it again would
+                    // count it twice.
                     this.setBlock(px + x, py + y, pz + z, block);
-                    this.setBlock(px - x, py + y, pz + z, block);
-                    this.setBlock(px + x, py - y, pz + z, block);
-                    this.setBlock(px + x, py + y, pz - z, block);
-                    this.setBlock(px - x, py - y, pz + z, block);
-                    this.setBlock(px + x, py - y, pz - z, block);
-                    this.setBlock(px - x, py + y, pz - z, block);
-                    this.setBlock(px - x, py - y, pz - z, block);
+                    if (x != 0) this.setBlock(px - x, py + y, pz + z, block);
+                    if (y != 0) this.setBlock(px + x, py - y, pz + z, block);
+                    if (z != 0) this.setBlock(px + x, py + y, pz - z, block);
+                    if (x != 0 && y != 0) this.setBlock(px - x, py - y, pz + z, block);
+                    if (y != 0 && z != 0) this.setBlock(px + x, py - y, pz - z, block);
+                    if (x != 0 && z != 0) this.setBlock(px - x, py + y, pz - z, block);
+                    if (x != 0 && y != 0 && z != 0) this.setBlock(px - x, py - y, pz - z, block);
                 }
             }
         }
 
-        return changes;
+        // The session's counter covers every edit made through it; report only this shape.
+        return changes - changesBefore;
     }
 
     /**
@@ -2535,6 +2548,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      * @throws MaxChangedBlocksException thrown if too many blocks are changed
      */
     public int makePyramid(final Vector position, final Pattern block, int size, final boolean filled) {
+        final int changesBefore = this.changes;
         final int height = size;
 
         for (int y = 0; y <= height; ++y) {
@@ -2542,16 +2556,18 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             for (int x = 0; x <= size; ++x) {
                 for (int z = 0; z <= size; ++z) {
                     if ((filled && (z <= size) && (x <= size)) || (z == size) || (x == size)) {
+                        // Mirroring a block on the centre lines onto itself would count it twice.
                         this.setBlock(position.add(x, y, z), block);
-                        this.setBlock(position.add(-x, y, z), block);
-                        this.setBlock(position.add(x, y, -z), block);
-                        this.setBlock(position.add(-x, y, -z), block);
+                        if (x != 0) this.setBlock(position.add(-x, y, z), block);
+                        if (z != 0) this.setBlock(position.add(x, y, -z), block);
+                        if (x != 0 && z != 0) this.setBlock(position.add(-x, y, -z), block);
                     }
                 }
             }
         }
 
-        return changes;
+        // The session's counter covers every edit made through it; report only this shape.
+        return changes - changesBefore;
     }
 
     /**
@@ -2785,6 +2801,8 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
      * @throws MaxChangedBlocksException thrown if too many blocks are changed
      */
     public int makeForest(final Vector basePosition, final int size, final double density, final TreeGenerator treeGenerator) {
+        // Counted apart from the session's block counter, which the trees' own blocks also raise.
+        int trees = 0;
         try {
             for (int x = basePosition.getBlockX() - size; x <= (basePosition.getBlockX() + size); ++x) {
                 for (int z = basePosition.getBlockZ() - size; z <= (basePosition.getBlockZ() + size); ++z) {
@@ -2800,7 +2818,9 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
                     for (int y = basePosition.getBlockY(); y >= (basePosition.getBlockY() - 10); --y) {
                         final int t = getLazyBlock(x, y, z).getType();
                         if ((t == BlockID.GRASS) || (t == BlockID.DIRT)) {
-                            treeGenerator.generate(EditSession.this, mutable.setComponents(x, y + 1, z));
+                            if (treeGenerator.generate(EditSession.this, mutable.setComponents(x, y + 1, z))) {
+                                trees++;
+                            }
                             break;
                         } else if (t == BlockID.SNOW) {
                             setBlock(x, y, z, nullBlock);
@@ -2812,7 +2832,7 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             }
         } catch (MaxChangedBlocksException ignore) {
         }
-        return this.changes;
+        return trees;
     }
 
     /**
@@ -3219,21 +3239,21 @@ public class EditSession extends AbstractDelegateExtent implements HasFaweQueue,
             final int tipx = (int) Math.round(tipv.getX());
             final int tipy = (int) Math.round(tipv.getY());
             final int tipz = (int) Math.round(tipv.getZ());
+            // Consecutive samples usually round to the same block; collecting them sets and counts each block once.
             if (radius == 0) {
-                setBlock(tipx, tipy, tipz, pattern.next(tipx, tipy, tipz));
-            } else {
-                vset.add(tipx, tipy, tipz);
+                // Nothing can be set outside the world, and the set refuses those positions with an exception.
+                if (tipy < 0 || tipy > getMaxY()) continue;
             }
+            vset.add(tipx, tipy, tipz);
         }
-        Set<Vector> newVset;
+        Set<Vector> newVset = vset;
         if (radius != 0) {
             newVset = this.getBallooned(vset, radius);
             if (!filled) {
                 newVset = this.getHollowed(newVset);
             }
-            return this.setBlocks(newVset, pattern);
         }
-        return changes;
+        return this.setBlocks(newVset, pattern);
     }
 
     private Set<Vector> getBallooned(final Set<Vector> vset, final double radius) {
