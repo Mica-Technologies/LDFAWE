@@ -11,7 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * A cylinder radius of N reaches N blocks either side of the center, a zero radius gives a one block
  * thick wall instead of nothing, the bounding box holds exactly the blocks it contains, and the
- * radius it was given is the radius it reports.
+ * radius it was given is the radius it reports. Its area is the number of blocks it contains, which
+ * //size and the selection messages show.
  */
 class CylinderRegionTest {
 
@@ -61,6 +62,30 @@ class CylinderRegionTest {
         assertEquals(new Vector2D(3, 7), new CylinderRegion(region).getRadius());
         region.extendRadius(new Vector2D(1, 1));
         assertEquals(new Vector2D(3, 7), region.getRadius());
+    }
+
+    @Test
+    void areaIsTheNumberOfContainedBlocks() {
+        int[][] radii = {{0, 0}, {1, 1}, {4, 4}, {5, 5}, {12, 12}, {40, 40}, {5, 0}, {0, 7}, {2, 7}, {9, 3}};
+        for (int[] r : radii) {
+            CylinderRegion region = new CylinderRegion(CENTER, new Vector2D(r[0], r[1]), 40, 44);
+            assertEquals(countContained(region), region.getArea(), "radius " + r[0] + "," + r[1]);
+        }
+        CylinderRegion flat = new CylinderRegion(CENTER, new Vector2D(5, 5), 40, 40);
+        assertEquals(countContained(flat), flat.getArea());
+    }
+
+    @Test
+    void areaFollowsRadiusAndHeightChanges() throws RegionOperationException {
+        CylinderRegion region = new CylinderRegion(CENTER, new Vector2D(5, 5), 40, 44);
+        region.setRadius(new Vector2D(7, 3));
+        assertEquals(countContained(region), region.getArea());
+        region.expand(new Vector(2, 0, 0), new Vector(-2, 0, 0), new Vector(0, 3, 0));
+        assertEquals(countContained(region), region.getArea());
+        region.contract(new Vector(2, 0, 0), new Vector(-2, 0, 0));
+        assertEquals(countContained(region), region.getArea());
+        region.setMaximumY(50);
+        assertEquals(countContained(region), region.getArea());
     }
 
     private static int countContained(CylinderRegion region) {

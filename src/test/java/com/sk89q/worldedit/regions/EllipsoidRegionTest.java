@@ -11,7 +11,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * An ellipsoid's height is its vertical diameter, capped at the world height. A radius of N reaches
  * N blocks either side of the center (a zero radius gives a one block thick shape), its bounding box
- * holds exactly the blocks it contains, and the radius it was given is the radius it reports.
+ * holds exactly the blocks it contains, and the radius it was given is the radius it reports. Its area
+ * is the number of blocks it contains, which //size and the selection messages show.
  */
 class EllipsoidRegionTest {
 
@@ -93,6 +94,47 @@ class EllipsoidRegionTest {
         assertEquals(region.getWidth(), maxX - minX + 1);
         assertEquals(region.getHeight(), maxY - minY + 1);
         assertEquals(region.getLength(), maxZ - minZ + 1);
+    }
+
+    @Test
+    void areaIsTheNumberOfContainedBlocks() {
+        int[][] radii = {
+                {0, 0, 0}, {1, 1, 1}, {4, 4, 4}, {5, 5, 5}, {12, 12, 12}, {31, 31, 31},
+                {5, 0, 5}, {9, 0, 4}, {0, 6, 0}, {3, 7, 2}, {10, 3, 6}, {1, 0, 0}
+        };
+        for (int[] r : radii) {
+            EllipsoidRegion region = new EllipsoidRegion((World) null, CENTER, new Vector(r[0], r[1], r[2]));
+            assertEquals(countContained(region), region.getArea(), "radius " + r[0] + "," + r[1] + "," + r[2]);
+        }
+        // The world height clips the shape, and the count with it
+        EllipsoidRegion clipped = new EllipsoidRegion((World) null, new Vector(0, 3, 0), new Vector(6, 6, 6));
+        assertEquals(countContained(clipped), clipped.getArea());
+    }
+
+    @Test
+    void areaFollowsRadiusAndCenterChanges() {
+        EllipsoidRegion region = new EllipsoidRegion((World) null, CENTER, new Vector(5, 5, 5));
+        int before = region.getArea();
+        region.setRadius(new Vector(6, 6, 6));
+        assertEquals(countContained(region), region.getArea());
+        region.setRadius(new Vector(5, 5, 5));
+        assertEquals(before, region.getArea());
+        region.setCenter(new Vector(0, 2, 0));
+        assertEquals(countContained(region), region.getArea());
+    }
+
+    private static int countContained(EllipsoidRegion region) {
+        Vector min = region.getMinimumPoint();
+        Vector max = region.getMaximumPoint();
+        int count = 0;
+        for (int x = min.getBlockX() - 2; x <= max.getBlockX() + 2; x++) {
+            for (int y = min.getBlockY(); y <= max.getBlockY(); y++) {
+                for (int z = min.getBlockZ() - 2; z <= max.getBlockZ() + 2; z++) {
+                    if (region.contains(new Vector(x, y, z))) count++;
+                }
+            }
+        }
+        return count;
     }
 
     @Test

@@ -103,10 +103,48 @@ public class EllipsoidRegion extends AbstractRegion {
         return center.add(reach()).clampY(0, 255);
     }
 
+    /**
+     * The block count last worked out, and the radius and center height it was worked out for. The radius is
+     * replaced, never changed in place, so comparing the reference is enough; the center height matters because
+     * the world height clips the shape.
+     */
+    private transient Vector areaRadius;
+    private transient int areaCenterY;
+    private transient int area;
+
+    /**
+     * The number of blocks {@link #contains} accepts inside the bounding box, which is what an edit of this region
+     * sets. A volume formula is several percent off at the radii players select. Counted one column at a time,
+     * which takes a few square-root estimates per column rather than a test of every block.
+     */
     @Override
     public int getArea() {
         if (radius == null) return 0;
-        return (int) Math.floor((4.0 / 3.0) * Math.PI * radius.getX() * radius.getY() * radius.getZ());
+        int centerY = center.getBlockY();
+        if (areaRadius == radius && areaCenterY == centerY) {
+            return area;
+        }
+        int minY = getMinimumPoint().getBlockY() - centerY;
+        int maxY = getMaximumPoint().getBlockY() - centerY;
+        int reachX = reach(radius.getX());
+        int reachZ = reach(radius.getZ());
+        long count = 0;
+        for (int cx = -reachX; cx <= reachX; cx++) {
+            double xn = cx / radius.getX();
+            for (int cy = minY; cy <= maxY; cy++) {
+                double yn = cy / radius.getY();
+                double rest = 1 - xn * xn - yn * yn;
+                int cz = rest > 0 ? Math.min(reachZ, (int) Math.floor(radius.getZ() * Math.sqrt(rest))) : 0;
+                // The estimate can be one off either way; settle it with the same test contains() uses.
+                while (cz >= 0 && !containsOffset(cx, cy, cz)) cz--;
+                while (cz < reachZ && containsOffset(cx, cy, cz + 1)) cz++;
+                if (cz >= 0) count += 2 * cz + 1;
+            }
+        }
+        area = (int) Math.min(Integer.MAX_VALUE, count);
+        areaRadius = radius;
+        areaCenterY = centerY;
+        return area;
     }
 
     @Override
@@ -229,17 +267,19 @@ public class EllipsoidRegion extends AbstractRegion {
 
     @Override
     public boolean contains(Vector position) {
-        int cx = position.getBlockX() - center.getBlockX();
+        return containsOffset(position.getBlockX() - center.getBlockX(), position.getBlockY() - center.getBlockY(),
+                position.getBlockZ() - center.getBlockZ());
+    }
+
+    private boolean containsOffset(int cx, int cy, int cz) {
         int cx2 = cx * cx;
         if (cx2 > radiusSqr.getX()) {
             return false;
         }
-        int cz = position.getBlockZ() - center.getBlockZ();
         int cz2 = cz * cz;
         if (cz2 > radiusSqr.getZ()) {
             return false;
         }
-        int cy = position.getBlockY() - center.getBlockY();
         int cy2 = cy * cy;
         if (cy2 > radiusSqr.getY()) {
             return false;

@@ -26,6 +26,7 @@ import com.boydti.fawe.object.clipboard.URIClipboardHolder;
 import com.boydti.fawe.object.mask.IdMask;
 import com.boydti.fawe.object.regions.selector.FuzzyRegionSelector;
 import com.boydti.fawe.object.regions.selector.PolyhedralRegionSelector;
+import com.boydti.fawe.util.RegionBlockCount;
 import com.google.common.base.Optional;
 import com.sk89q.minecraft.util.commands.Command;
 import com.sk89q.minecraft.util.commands.CommandContext;
@@ -648,7 +649,7 @@ public class SelectionCommands {
 
         player.print(BBC.getPrefix() + "Size: " + size);
         player.print(BBC.getPrefix() + "Cuboid distance: " + region.getMaximumPoint().distance(region.getMinimumPoint()));
-        player.print(BBC.getPrefix() + "# of blocks: " + region.getArea());
+        player.print(BBC.getPrefix() + "# of blocks: " + RegionBlockCount.format(region));
     }
 
 
