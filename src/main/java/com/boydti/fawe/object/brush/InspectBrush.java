@@ -103,14 +103,20 @@ public class InspectBrush extends BrushTool implements DoubleActionTraceTool {
                         BBC.TOOL_INSPECT_INFO.send(fp, name, FaweCache.getMaterialName(from), FaweCache.getMaterialName(to), ageFormatted);
                         count.incrementAndGet();
                     }
-                } catch (IOException e) {
+                } catch (IOException | RuntimeException e) {
+                    // One unreadable history file must not stop the others being searched or the reply being sent.
                     e.printStackTrace();
                 }
             }
         }, new Runnable() {
             @Override
             public void run() {
-                BBC.TOOL_INSPECT_INFO_FOOTER.send(fp, count);
+                if (count.get() == 0) {
+                    // Name the position, so a right click that lands on the air in front of a face says what it looked at.
+                    BBC.TOOL_INSPECT_NONE.send(fp, x, y, z);
+                } else {
+                    BBC.TOOL_INSPECT_INFO_FOOTER.send(fp, count);
+                }
             }
         }, false, false);
         return true;
