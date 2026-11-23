@@ -5,7 +5,6 @@ import com.boydti.fawe.FaweCache;
 import com.boydti.fawe.example.CharFaweChunk;
 import com.boydti.fawe.example.NMSMappedFaweQueue;
 import com.boydti.fawe.forge.ForgePlayer;
-import com.boydti.fawe.forge.MutableGenLayer;
 import com.boydti.fawe.object.FaweChunk;
 import com.boydti.fawe.object.FawePlayer;
 import com.boydti.fawe.object.brush.visualization.VisualChunk;
@@ -43,8 +42,8 @@ import net.minecraft.util.math.ChunkPos;
 import net.minecraft.world.EnumSkyBlock;
 import net.minecraft.world.World;
 import net.minecraft.world.WorldServer;
-import net.minecraft.world.biome.BiomeCache;
 import net.minecraft.world.biome.BiomeProvider;
+import net.minecraft.world.biome.BiomeProviderSingle;
 import net.minecraft.world.chunk.BlockStateContainer;
 import net.minecraft.world.chunk.Chunk;
 import net.minecraft.world.chunk.IChunkProvider;
@@ -81,7 +80,7 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
     protected static Field fieldGenLayer2;
     private static Field fieldPrecipitationHeightMap;
     private static Field fieldHeightMapMinimum;
-    private static MutableGenLayer genLayer;
+    private static Field fieldWorldBiomeProvider;
 
     static {
         try {
@@ -105,6 +104,8 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
             fieldGenLayer1 = ObfuscationReflectionHelper.findField(BiomeProvider.class, "field_76944_d");
             // fieldGenLayer2 = BiomeProvider.class.getDeclaredField("biomeIndexLayer"); // field_76945_e
             fieldGenLayer2 = ObfuscationReflectionHelper.findField(BiomeProvider.class, "field_76945_e");
+            // fieldWorldBiomeProvider = WorldProvider.class.getDeclaredField("biomeProvider"); // field_76578_c
+            fieldWorldBiomeProvider = ObfuscationReflectionHelper.findField(net.minecraft.world.WorldProvider.class, "field_76578_c");
 
             // fieldTickingBlockCount = ExtendedBlockStorage.class.getDeclaredField("tickRefCount"); // field_76683_c
             fieldTickingBlockCount = ObfuscationReflectionHelper.findField(ExtendedBlockStorage.class, "field_76683_c");
@@ -318,39 +319,37 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
                 if (seed == null) {
                     seed = world.getSeed();
                 }
-                nmsWorld.getWorldInfo().getSeed();
-                boolean result;
-                ChunkGeneratorOverworld generator = new ChunkGeneratorOverworld(nmsWorld, seed, false, "");
                 net.minecraft.world.biome.Biome base = net.minecraft.world.biome.Biome.getBiome(biome.getId());
-                net.minecraft.world.biome.Biome[] existingBiomes = new net.minecraft.world.biome.Biome[256];
-                Arrays.fill(existingBiomes, base);
-                fieldBiomes.set(generator, existingBiomes);
+                if (base == null) {
+                    // Generating with a biome the registry does not know would leave an unknown id in the chunk.
+                    return false;
+                }
+                ChunkGeneratorOverworld generator = new ChunkGeneratorOverworld(nmsWorld, seed, false, "");
                 IChunkGenerator existingGenerator = (IChunkGenerator) fieldChunkGenerator.get(nmsWorld.getChunkProvider());
                 long existingSeed = world.getSeed();
-                {
-                    if (genLayer == null) genLayer = new MutableGenLayer(seed);
-                    genLayer.set(biome.getId());
-                    Object existingGenLayer1 = fieldGenLayer1.get(nmsWorld.provider.getBiomeProvider());
-                    Object existingGenLayer2 = fieldGenLayer2.get(nmsWorld.provider.getBiomeProvider());
-                    fieldGenLayer1.set(nmsWorld.provider.getBiomeProvider(), genLayer);
-                    fieldGenLayer2.set(nmsWorld.provider.getBiomeProvider(), genLayer);
-
+                // The generator asks the world's biome provider for its biomes. Swapping the whole provider for one
+                // that returns only the requested biome works for every world type: a flat world's single-biome
+                // provider ignores the generation layers, so replacing those alone still generated plains there.
+                BiomeProvider existingProvider = (BiomeProvider) fieldWorldBiomeProvider.get(nmsWorld.provider);
+                try {
                     fieldSeed.set(nmsWorld.getWorldInfo(), seed);
-
-                    ReflectionUtils.setFailsafeFieldValue(fieldBiomeCache, this.nmsWorld.provider.getBiomeProvider(), new BiomeCache(this.nmsWorld.provider.getBiomeProvider()));
-
+                    fieldWorldBiomeProvider.set(nmsWorld.provider, new BiomeProviderSingle(base));
                     ReflectionUtils.setFailsafeFieldValue(fieldChunkGenerator, this.nmsWorld.getChunkProvider(), generator);
-
-                    result = regenerateChunk(world, x, z);
-
+                    // The world's own provider goes back before population: population reads biomes in the
+                    // neighbouring chunks too, and with REID a column nobody has read yet would be filled from
+                    // whichever provider is installed at that moment.
+                    return regenerateChunk(world, x, z, biome.getId(), () -> {
+                        try {
+                            fieldWorldBiomeProvider.set(nmsWorld.provider, existingProvider);
+                        } catch (IllegalAccessException e) {
+                            throw new RuntimeException(e);
+                        }
+                    });
+                } finally {
                     ReflectionUtils.setFailsafeFieldValue(fieldChunkGenerator, this.nmsWorld.getChunkProvider(), existingGenerator);
-
+                    fieldWorldBiomeProvider.set(nmsWorld.provider, existingProvider);
                     fieldSeed.set(nmsWorld.getWorldInfo(), existingSeed);
-
-                    fieldGenLayer1.set(nmsWorld.provider.getBiomeProvider(), existingGenLayer1);
-                    fieldGenLayer2.set(nmsWorld.provider.getBiomeProvider(), existingGenLayer2);
                 }
-                return result;
             } catch (Throwable e) {
                 e.printStackTrace();
             }
@@ -359,6 +358,14 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
     }
 
     public boolean regenerateChunk(World world, int x, int z) {
+        return regenerateChunk(world, x, z, -1, null);
+    }
+
+    /**
+     * @param biomeId       the biome to store in every column of the new chunk, or -1 to keep what the generator chose
+     * @param afterGenerate run once the chunk is generated and before it is populated, or null
+     */
+    private boolean regenerateChunk(World world, int x, int z, int biomeId, Runnable afterGenerate) {
         IChunkProvider provider = world.getChunkProvider();
         if (!(provider instanceof ChunkProviderServer)) {
             return false;
@@ -394,6 +401,17 @@ public class ForgeQueue_All extends NMSMappedFaweQueue<World, Chunk, ExtendedBlo
             Map<Long, Chunk> id2ChunkMap = (Map<Long, Chunk>) fieldLoadedChunks.get(chunkServer);
             id2ChunkMap.remove((Long) pos);
             mcChunk = gen.generateChunk(x, z);
+            if (mcChunk != null && biomeId >= 0) {
+                // With REID the generator's biomes go to a throwaway byte array and the chunk's real storage stays
+                // unset until something reads it, by which time the world's own biome provider is back. Store the
+                // biome now, before population reads it and before watching players are sent the chunk.
+                if (!REIDBiomeHelper.fillBiomes(mcChunk, biomeId)) {
+                    Arrays.fill(mcChunk.getBiomeArray(), (byte) biomeId);
+                }
+            }
+            if (afterGenerate != null) {
+                afterGenerate.run();
+            }
             id2ChunkMap.put(pos, mcChunk);
             if (mcChunk != null) {
                 mcChunk.onLoad();
