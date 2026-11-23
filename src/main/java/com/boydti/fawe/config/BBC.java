@@ -153,6 +153,8 @@ public enum BBC {
     TOOL_INSPECT("Inspect tool bound to %s0.", "WorldEdit.Tool"),
     TOOL_INSPECT_INFO("&7%s0 changed %s1 to %s2 %s3 ago", "WorldEdit.Tool"),
     TOOL_INSPECT_INFO_FOOTER("&6Total: &7%s0 changes", "WorldEdit.Tool"),
+    TOOL_INSPECT_USAGE("&7Left click shows the recorded changes of the block you hit; right click those of the space in front of the face you click.", "WorldEdit.Tool"),
+    TOOL_INSPECT_NONE("&7No changes recorded at %s0, %s1, %s2.", "WorldEdit.Tool"),
     TOOL_NONE("Tool unbound from your current item.", "WorldEdit.Tool"),
     TOOL_INFO("Info tool bound to %s0.", "WorldEdit.Tool"),
     TOOL_TREE("Tree tool bound to %s0.", "WorldEdit.Tool"),
