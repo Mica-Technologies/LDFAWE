@@ -231,9 +231,37 @@ public class CylinderRegion extends AbstractRegion implements FlatRegion {
         return minY;
     }
 
+    /**
+     * The number of columns last counted and the radius they were counted for. The radius is replaced, never
+     * changed in place, so comparing the reference is enough.
+     */
+    private transient Vector2D columnsRadius;
+    private transient long columns;
+
+    /**
+     * The number of blocks {@link #contains} accepts, which is what an edit of this region sets. A volume formula
+     * is several percent off at the radii players select. Every layer holds the same columns, so only one layer
+     * is counted, a few square-root estimates per row.
+     */
     @Override
     public int getArea() {
-        return (int) Math.floor(radius.getX() * radius.getZ() * Math.PI * getHeight());
+        if (columnsRadius != radius) {
+            int reachX = reach(radius.getX());
+            int reachZ = reach(radius.getZ());
+            long count = 0;
+            for (int dx = -reachX; dx <= reachX; dx++) {
+                double xn = Math.abs(dx) * radiusInverse.getX();
+                double rest = 1 - xn * xn;
+                int dz = rest > 0 ? Math.min(reachZ, (int) Math.floor(radius.getZ() * Math.sqrt(rest))) : 0;
+                // The estimate can be one off either way; settle it with the same test contains() uses.
+                while (dz >= 0 && !containsColumn(dx, dz)) dz--;
+                while (dz < reachZ && containsColumn(dx, dz + 1)) dz++;
+                if (dz >= 0) count += 2 * dz + 1;
+            }
+            columns = count;
+            columnsRadius = radius;
+        }
+        return (int) Math.min(Integer.MAX_VALUE, columns * getHeight());
     }
 
     @Override
@@ -336,11 +364,12 @@ public class CylinderRegion extends AbstractRegion implements FlatRegion {
         if (pt < getMinimumY() || pt > getMaximumY()) {
             return false;
         }
-        int px = position.getBlockX();
-        int pz = position.getBlockZ();
+        return containsColumn(position.getBlockX() - center.getBlockX(), position.getBlockZ() - center.getBlockZ());
+    }
 
-        double dx = Math.abs(px - center.getBlockX()) * radiusInverse.getX();
-        double dz = Math.abs(pz - center.getBlockZ()) * radiusInverse.getZ();
+    private boolean containsColumn(int offsetX, int offsetZ) {
+        double dx = Math.abs(offsetX) * radiusInverse.getX();
+        double dz = Math.abs(offsetZ) * radiusInverse.getZ();
 
         return dx * dx + dz * dz <= 1;
     }

@@ -20,6 +20,7 @@
 package com.sk89q.worldedit.regions.selector;
 
 import com.boydti.fawe.config.BBC;
+import com.boydti.fawe.util.RegionBlockCount;
 import com.google.common.base.Optional;
 import com.sk89q.worldedit.BlockVector;
 import com.sk89q.worldedit.BlockVector2D;
@@ -178,7 +179,7 @@ public class Polygonal2DRegionSelector extends com.sk89q.worldedit.regions.Polyg
 
     @Override
     public void explainPrimarySelection(Actor player, LocalSession session, Vector pos) {
-        BBC.SELECTOR_POS.send(player, 1, pos, region.getArea());
+        BBC.SELECTOR_POS.send(player, 1, pos, RegionBlockCount.format(region));
 
         session.dispatchCUIEvent(player, new SelectionShapeEvent(getTypeID()));
         session.dispatchCUIEvent(player, new SelectionPoint2DEvent(0, pos, getArea()));
@@ -187,7 +188,7 @@ public class Polygonal2DRegionSelector extends com.sk89q.worldedit.regions.Polyg
 
     @Override
     public void explainSecondarySelection(Actor player, LocalSession session, Vector pos) {
-        BBC.SELECTOR_POS.send(player, region.size(), pos, region.getArea());
+        BBC.SELECTOR_POS.send(player, region.size(), pos, RegionBlockCount.format(region));
 
         session.dispatchCUIEvent(player, new SelectionPoint2DEvent(region.size() - 1, pos, getArea()));
         session.dispatchCUIEvent(player, new SelectionMinMaxEvent(region.getMinimumY(), region.getMaximumY()));
