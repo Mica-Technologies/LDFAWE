@@ -146,6 +146,25 @@ public final class REIDBiomeHelper {
     }
 
     /**
+     * Store one biome in every column of a chunk through REID's API. No packet is sent: this is meant for a
+     * chunk that has not been sent to any player yet.
+     *
+     * @return true if REID stored the biomes, false if REID is absent or the call failed
+     */
+    public static boolean fillBiomes(Chunk chunk, int biomeId) {
+        if (!isAvailable()) return false;
+        try {
+            int[] biomes = new int[256];
+            java.util.Arrays.fill(biomes, biomeId);
+            replaceBiomesMethod.invoke(biomeApiInstance, chunk, biomes);
+            return true;
+        } catch (Exception e) {
+            Fawe.debug("REID fillBiomes failed: " + e);
+            return false;
+        }
+    }
+
+    /**
      * Send a biome chunk change packet to all clients tracking this chunk.
      * Uses REID's MessageManager to push the updated biome data to players.
      */
