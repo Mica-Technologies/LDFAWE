@@ -298,15 +298,12 @@ public class PolyhedralRegion extends AbstractRegion {
     }
 
     private boolean containsRaw(Vector pt) {
-        if (lastTriangle != null && lastTriangle.contains(pt)) {
-            return true;
-        }
+        // No remembered triangle here. Adding a vertex tests points while the mesh is being
+        // rebuilt, so a remembered triangle could be one that has since been removed and
+        // would keep matching points that are no longer part of the region. It was also
+        // written from every thread that tests the region.
         for (Triangle triangle : triangles) {
-            if (lastTriangle == triangle) {
-                continue;
-            }
             if (triangle.contains(pt)) {
-                lastTriangle = triangle;
                 return true;
             }
         }
