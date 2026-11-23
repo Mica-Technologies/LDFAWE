@@ -765,6 +765,14 @@ public class RegionCommands extends MethodCommands {
                 BiomeRegistry biomeRegistry = player.getWorld().getWorldData().getBiomeRegistry();
                 List<BaseBiome> knownBiomes = biomeRegistry.getBiomes();
                 biome = Biomes.findBiomeByName(knownBiomes, args.getString(0), biomeRegistry);
+                if (biome == null) {
+                    // An unknown name used to be dropped, and the region was regenerated
+                    // with its current biome as if no biome had been asked for
+                    session.setMask(mask);
+                    session.setSourceMask(sourceMask);
+                    player.sendMessage(BBC.getPrefix() + "Unknown biome '" + args.getString(0) + "'. Use /biomelist to list the biomes.");
+                    return;
+                }
             }
             Long seed = args.argsLength() != 2 || !MathMan.isInteger(args.getString(1)) ? null : Long.parseLong(args.getString(1));
             boolean regenerated;
